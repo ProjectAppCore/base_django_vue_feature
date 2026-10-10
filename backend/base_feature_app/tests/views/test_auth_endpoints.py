@@ -118,21 +118,24 @@ def test_sign_up_returns_safe_server_error_on_persistence_failure(
     records = [record for record in caplog.records if record.name == 'base_feature_app.views.auth']
     assert len(records) == 1
     record = records[0]
-    assert record.levelno == logging.ERROR
-    assert record.msg == 'Unexpected authentication failure: operation=%s exception_type=%s'
-    assert record.args == ('sign_up', 'IntegrityError')
-    assert record.getMessage() == (
-        'Unexpected authentication failure: operation=sign_up exception_type=IntegrityError'
-    )
-    assert record.exc_info is None
-    assert record.stack_info is None
+    assert {
+        'level': record.levelno, 'template': record.msg,
+        'args': record.args, 'message': record.getMessage(),
+        'exc_info': record.exc_info, 'stack_info': record.stack_info,
+    } == {
+        'level': logging.ERROR,
+        'template': 'Unexpected authentication failure: operation=%s exception_type=%s',
+        'args': ('sign_up', 'IntegrityError'),
+        'message': 'Unexpected authentication failure: operation=sign_up exception_type=IntegrityError',
+        'exc_info': None, 'stack_info': None,
+    }
     safe_output = response.content.decode() + caplog.text
-    assert rejected_auth_insert not in safe_output
-    assert admin_user.email not in safe_output
-    assert 'private-persistence-detail' not in safe_output
-    assert 'synthetic-private-password' not in safe_output
-    assert 'synthetic-private-captcha-token' not in safe_output
-    assert 'synthetic-private-captcha-secret' not in safe_output
+    private_markers = [
+        rejected_auth_insert, admin_user.email, 'private-persistence-detail',
+        'synthetic-private-password', 'synthetic-private-captcha-token',
+        'synthetic-private-captcha-secret',
+    ]
+    assert [marker for marker in private_markers if marker in safe_output] == []
 
 
 @pytest.mark.django_db
@@ -161,21 +164,23 @@ def test_google_login_returns_safe_server_error_on_persistence_failure(
     records = [record for record in caplog.records if record.name == 'base_feature_app.views.auth']
     assert len(records) == 1
     record = records[0]
-    assert record.levelno == logging.ERROR
-    assert record.msg == 'Unexpected authentication failure: operation=%s exception_type=%s'
-    assert record.args == ('google_login', 'IntegrityError')
-    assert record.getMessage() == (
-        'Unexpected authentication failure: operation=google_login exception_type=IntegrityError'
-    )
-    assert record.exc_info is None
-    assert record.stack_info is None
+    assert {
+        'level': record.levelno, 'template': record.msg,
+        'args': record.args, 'message': record.getMessage(),
+        'exc_info': record.exc_info, 'stack_info': record.stack_info,
+    } == {
+        'level': logging.ERROR,
+        'template': 'Unexpected authentication failure: operation=%s exception_type=%s',
+        'args': ('google_login', 'IntegrityError'),
+        'message': 'Unexpected authentication failure: operation=google_login exception_type=IntegrityError',
+        'exc_info': None, 'stack_info': None,
+    }
     safe_output = response.content.decode() + caplog.text
-    assert rejected_auth_insert not in safe_output
-    assert admin_user.email not in safe_output
-    assert 'private-persistence-detail' not in safe_output
-    assert 'synthetic-private-google-credential' not in safe_output
-    assert 'Synthetic' not in safe_output
-    assert 'Private' not in safe_output
+    private_markers = [
+        rejected_auth_insert, admin_user.email, 'private-persistence-detail',
+        'synthetic-private-google-credential', 'Synthetic', 'Private',
+    ]
+    assert [marker for marker in private_markers if marker in safe_output] == []
 
 
 @pytest.mark.django_db
