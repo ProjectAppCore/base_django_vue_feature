@@ -7,6 +7,9 @@ async function openCheckoutWithProduct(page) {
   // quality: allow-fragile-selector (products come from the scratch database; select one real product)
   await expect(productLinks.first()).toBeVisible({ timeout: 15000 });
   await productLinks.first().click();
+  await expect(page).toHaveURL(/\/product\/\d+$/);
+  // Leave the image hover zoom, which temporarily replaces purchase controls.
+  await page.mouse.move(0, 0);
   await page.getByRole('button', { name: /add to cart/i }).click();
   await page.getByRole('button', { name: 'OK', exact: true }).click();
   await page.getByTestId('header-cart').click();
