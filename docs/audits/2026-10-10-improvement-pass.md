@@ -135,8 +135,10 @@ Las ejecuciones iniciales de backend/unit corresponden a
 `d0ccf4f778706b82836551ea6cd3075e056d2f38`. La repetición E2E con imagen y
 auditorías afectadas corresponde a `8b463cb4f00db976a8b23a6ed3c597a0368fa997`.
 La incorporación del informe sólo añade Markdown; el Verifier vuelve a
-vincular las ejecuciones al SHA final limpio mediante un manifest. Los PRs
-consignan ese SHA y el resultado final de CI antes de integrar.
+comprobar lo afectado sobre el SHA final limpio. El manifest conserva el SHA
+real de cada ejecución y demuestra qué entradas ejecutables permanecen
+idénticas; no atribuye ejecuciones antiguas a un commit nuevo. Los PRs consignan
+el SHA final y el resultado de CI antes de integrar.
 
 La comprobación sobre `917a42e8908e02d1bff84729bc55c325621b705f` volvió a
 pasar los 84 casos backend y los 10 unit, pero rechazó el checkout: los cinco
@@ -158,8 +160,15 @@ y cero reintentos. Conserva proyecto, viewport, acciones, animaciones y código
 de pruebas. La primera ejecución pasó los cinco casos en 44,4 segundos; un
 error de nombres de variables del reporter exigió repetir únicamente para
 capturar JSON/JUnit reales, sin reconstruirlos a partir de la conclusión.
-El veredicto y los artefactos estructurados quedan consignados en el PR antes
-de integrar. No se aplicó un cambio de producto por esta limitación ambiental.
+La captura posterior pasó **5/5 en 42,1 segundos**, sin reintentos, skips ni
+flaky. El Verifier aprobó las tres causas sobre
+`917a42e8908e02d1bff84729bc55c325621b705f`: 84 casos backend, 10 unit y cinco
+E2E; gate sin errores y flujos sin brechas adicionales. Los JSON/JUnit reales
+están en `917a42e/environment90/checkout.{json,xml}`, junto al manifest y el
+veredicto. Esa ejecución usó el build de producción servido por Vite preview;
+su procedencia y controles HTTP están en `917a42e/runtime-built.json`.
+El PR consigna también la comprobación afectada tras este cambio documental.
+No se aplicó un cambio de producto por esta limitación ambiental.
 
 El CI de integración sobre ese SHA también acredita los cinco casos de
 checkout en su primer intento, mediante el artefacto oficial de
