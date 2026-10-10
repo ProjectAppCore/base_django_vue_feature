@@ -1,6 +1,6 @@
 # User Flow Map
 
-Version: 1.1.0
+Version: 1.1.1
 Last Updated: 2026-10-10
 Description: End-to-end user flows for the Base Feature frontend (Vite + Vue 3 SPA), grouped by role, with the outcome classes (success / error / failure / display) each flow is expected to exercise.
 Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, frontend/e2e specs, frontend/src/router/index.js, frontend/src/views/**, frontend/src/components/**, frontend/src/stores/**, backend/base_feature_app/{views,urls,permissions,admin.py}.
@@ -259,9 +259,17 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 
 ### Home module
 
-#### home-carousel-navigate: Navigate home page carousels
+#### home-carousel-navigate: Navigate home trending grids
 - Module: home · Priority: P3 · Route: `/` · Roles: shared
-- E2E Coverage: success ✅ (`frontend/e2e/home/home-carousels.spec.js`) — product/blog carousel `next`/`prev` (`data-testid="product-carousel-*"`, `blog-carousel-*"`) asserted by actual transform change, not bare visibility.
+- Description: todos los productos y blogs recibidos se muestran en orden, en grillas estáticas de 1/2/5 columnas. Se conservan los nombres de componentes y el ID del flujo.
+- Evidence: `frontend/src/components/product/ProductCarousel.vue`, `frontend/src/components/blog/BlogCarousel.vue`, `frontend/src/views/Home.vue`.
+- E2E: `frontend/e2e/home/home-carousels.spec.js`; escenarios actualizados, ejecución de esta ronda pendiente del QA combinado.
+
+**Steps**: abrir Inicio, comprobar cantidad contra la respuesta real del API, llegar al último producto/blog con scroll normal y abrir su detalle verificando ID y título. No hay flechas, transform ni autoplay.
+
+**Matriz**: 835×1194 primero (2 columnas); 412×915 (1); 1195×835, 1440×900 y 2560×1440 (5). La interacción comprueba ausencia de overflow horizontal del documento. No se infiere acceso por cambios de transform.
+
+**Outcomes**: success — navegación al registro correcto. Error/failure no tienen estados propios de estas grillas; carga/datos vacíos conservan el comportamiento existente y se verifican en unit.
 
 ---
 
@@ -269,32 +277,42 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 
 #### header-search: Search modal open/close
 - Module: navigation · Priority: P2 · Roles: shared
-- E2E Coverage: success ✅ (`frontend/e2e/navigation/navigation-search.spec.js`)
+- Description: búsqueda disponible directamente en la barra, también en celular/tableta, sin abrir el menú móvil.
+- Evidence: `frontend/src/components/layouts/Header.vue`, `frontend/src/components/layouts/SearchBar.vue`.
+- E2E: `frontend/e2e/navigation/navigation-search.spec.js`; escenarios actualizados, ejecución de esta ronda pendiente del QA combinado.
 
-**Steps**: click `data-testid="header-search"`; overlay (`search-overlay`) appears; type/clear query; close.
+**Steps**: abrir `header-search`, buscar un título real, seleccionar su resultado y verificar ID/título del detalle y cierre del overlay. Otro escenario conserva el cierre mediante `search-close`.
+
+**Matriz**: 835×1194 primero; luego 412×915, 1195×835, 1440×900 y 2560×1440. El trigger mide al menos 44×44 px; el Header no produce overflow horizontal. SearchBar conserva sus controles y layout internos; su presentación con muchos resultados requiere inspección visual, no se certifica por esta actualización.
+
+**Outcomes**: success — búsqueda/navegación y cierre. Error/failure no tienen presentación propia en la búsqueda actual; no se inventan nuevos estados.
 
 ---
 
 #### header-cart-overlay: Cart overlay open/close
 - Module: navigation · Priority: P2 · Roles: shared
-- Evidence: `frontend/src/components/product/ShoppingCart.vue`.
-- E2E Coverage: success ✅, display ✅ (both `frontend/e2e/navigation/navigation-cart-overlay.spec.js` — display closed 2026-08-13)
+- Evidence: `frontend/src/components/layouts/Header.vue`, `frontend/src/components/product/ShoppingCart.vue`.
+- E2E: success y display en `frontend/e2e/navigation/navigation-cart-overlay.spec.js`; escenarios actualizados, ejecución de esta ronda pendiente del QA combinado.
 
-**Steps**: agregar un artículo por la interfaz del catálogo y abrir `header-cart`. El panel y el enlace Checkout quedan disponibles sin animación decorativa de entrada o salida. El botón `cart-close` o el backdrop actualiza inmediatamente la visibilidad del padre; el siguiente render retira panel y backdrop y libera el scroll. Reabrir conserva artículos, cantidades, subtotal y almacenamiento, y permite otro cierre.
+**Steps**: agregar un artículo por la interfaz del catálogo y abrir `header-cart` directamente desde la barra. El panel y Checkout quedan disponibles sin animación decorativa. Cerrar con `cart-close`, reabrir y comprobar título, cantidad, subtotal y almacenamiento conservados; navegar a Checkout. El backdrop mantiene su cierre donde queda expuesto (desde 1024 px); en celular/tableta vertical el panel ocupa todo el ancho y se usa el botón real.
 
-**Validación de esta revisión**: el escenario de éxito existente comprueba cierre, reapertura y conservación con un artículo agregado por la interfaz; su ejecución se acredita en los artefactos y CI del PR asociado. Las marcas históricas de cobertura anteriores no certifican la ejecución de esta revisión. Los casos de componente comprueban el efecto del padre y la navegación a Checkout desde un carrito recién abierto con el router real.
+**Matriz**: 835×1194 primero; luego 412×915, 1195×835, 1440×900 y 2560×1440. Los controles de la barra miden al menos 44×44 px y no producen overflow horizontal. Sin skips móviles, viewport forzado ni cambios internos en ShoppingCart.
 
-**Branches (now formalized as the `display` outcome)**: empty cart shows "No products" + "Continue Shopping" link (`ShoppingCart.vue:25-30`); non-empty cart shows line items, subtotal, and a "Checkout" button (`:33-54`). The empty-cart case is trivially and deterministically testable — a fresh browser context always starts with an empty cart, no backend fixture needed — which is why it was promoted to a declared outcome here (unlike the catalog/blog empty-list cases, which need backend-side zero-record control; see Cross-Cutting Notes).
+**Branches**: carrito vacío muestra “No products” y su enlace “Continue Shopping” abre catálogo; carrito con artículos conserva líneas, subtotal y Checkout. Los contratos de creación de pedido y sus fallos pertenecen a los flujos de checkout existentes, que se reejecutan como regresión.
 
 ---
 
-#### theme-toggle: Switch color theme *(new)*
+#### theme-toggle: Switch color theme
 - Module: navigation · Priority: P4 · Roles: shared
-- Description: User switches between Light/Dark/System theme from the header menu; preference persists.
-- Evidence: `frontend/src/components/layouts/ThemeToggle.vue:1-53`; store `frontend/src/stores/theme.js:24-74` (persisted to localStorage, `pick: ['mode']`; applies/removes the `dark` class on `<html>`).
-- E2E Coverage: success ✅ (`frontend/e2e/navigation/navigation-theme-toggle.spec.js` — closed 2026-08-13; note: Headless UI's `MenuItem` overrides the option buttons' role to `menuitem`)
+- Description: una única instancia de ThemeToggle está disponible directamente en la barra a todos los anchos; la preferencia persiste.
+- Evidence: `frontend/src/components/layouts/Header.vue`, `frontend/src/components/layouts/ThemeToggle.vue`, `frontend/src/stores/theme.js`.
+- E2E: `frontend/e2e/navigation/navigation-theme-toggle.spec.js`; escenarios actualizados, ejecución de esta ronda pendiente del QA combinado.
 
-**Steps**: open the theme menu (`aria-label="Toggle theme"` button, Headless UI `Menu`); select Light/Dark/System; `<html>` gains/loses the `dark` class; reload — preference persists.
+**Steps**: abrir “Toggle theme”, seleccionar Light/Dark/System y recargar; la preferencia se conserva. El escenario de esta revisión selecciona Dark y comprueba la clase de `<html>` después de la recarga.
+
+**Matriz**: 835×1194 primero; luego 412×915, 1195×835, 1440×900 y 2560×1440. Trigger de 44×44 px y opciones de al menos 44 px de alto, sin overflow horizontal del documento. Headless UI mantiene rol `menuitem` para las opciones y navegación por teclado.
+
+**Outcomes**: success — preferencia aplicada y conservada. No hay API ni error/failure propios de esta acción.
 
 ---
 
@@ -447,10 +465,10 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 | blog-list-view | blog | P2 | success | success ✅ | blog/blog-list.spec.js |
 | blog-detail-view | blog | P2 | success | success ✅ | blog/blog-detail.spec.js |
 | blog-detail-not-found | blog | P3 | display | display ✅ (relabeled 2026-08-13, see notes) | blog/blog-detail.spec.js |
-| home-carousel-navigate | home | P3 | success | success ✅ | home/home-carousels.spec.js |
-| header-search | navigation | P2 | success | success ✅ | navigation/navigation-search.spec.js |
-| header-cart-overlay | navigation | P2 | success, display | success ✅ · display ✅ | navigation/navigation-cart-overlay.spec.js |
-| theme-toggle | navigation | P4 | success | success ✅ | navigation/navigation-theme-toggle.spec.js |
+| home-carousel-navigate | home | P3 | success | success: ejecución ronda 2 pendiente | home/home-carousels.spec.js |
+| header-search | navigation | P2 | success | success: ejecución ronda 2 pendiente | navigation/navigation-search.spec.js |
+| header-cart-overlay | navigation | P2 | success, display | success/display: ejecución ronda 2 pendiente | navigation/navigation-cart-overlay.spec.js |
+| theme-toggle | navigation | P4 | success | success: ejecución ronda 2 pendiente | navigation/navigation-theme-toggle.spec.js |
 | not-found-page | navigation | P3 | display | display ✅ | navigation/navigation-not-found.spec.js |
 | static-about | static | P4 | display | display ✅ | static/static-pages.spec.js |
 | static-contact | static | P4 | display | display ✅ | static/static-pages.spec.js |

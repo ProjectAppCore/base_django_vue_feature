@@ -1,7 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
-import { nextTick } from 'vue';
 
 jest.mock('@/services/http/client', () => ({
   get: jest.fn(),
@@ -15,7 +14,7 @@ jest.mock('@/services/http/tokens', () => ({
   clearTokens: jest.fn(),
 }));
 
-import { useBlogStore } from '@/stores/blog';
+import httpClient from '@/services/http/client';
 import { useLanguageStore } from '@/stores/language';
 import BlogCarousel from '@/components/blog/BlogCarousel.vue';
 
@@ -37,143 +36,76 @@ function buildRouter() {
   });
 }
 
-describe('BlogCarousel Component', () => {
-  let blogStore;
+describe('BlogCarousel responsive grid', () => {
   let router;
 
   beforeEach(() => {
     setActivePinia(createPinia());
-    jest.useFakeTimers();
     jest.clearAllMocks();
     router = buildRouter();
-    blogStore = useBlogStore();
-    jest.spyOn(blogStore, 'fetchBlogs').mockResolvedValue();
-    blogStore.blogs = [...sampleBlogs];
+    httpClient.get.mockResolvedValue({ data: sampleBlogs });
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  test('renders carousel items when blogs are present', async () => {
+  async function renderGrid() {
+    await router.push('/');
+    await router.isReady();
     const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
     await flushPromises();
+    return wrapper;
+  }
 
-    expect(wrapper.findAll('[data-testid="blog-carousel-item"]').length).toBe(sampleBlogs.length);
+  test('shows received blogs in their original order', async () => {
+    const wrapper = await renderGrid();
+
+    const titles = wrapper.findAll('[data-testid="blog-carousel-item"] h3').map((item) => item.text());
+    expect(titles).toEqual(sampleBlogs.map((item) => item.title));
   });
 
-  test('renders nothing when blogs list is empty', async () => {
-    blogStore.blogs = [];
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
+  test('shows the received category for each blog', async () => {
+    const wrapper = await renderGrid();
+
+    const values = wrapper.findAll('[data-testid="blog-carousel-item"] p').map((item) => item.text());
+    expect(values).toEqual(sampleBlogs.map((item) => item.category));
+  });
+
+  test('shows the received image for each blog', async () => {
+    const wrapper = await renderGrid();
+
+    const images = wrapper.findAll('[data-testid="blog-carousel-item"] img').map((item) => item.attributes('src'));
+    expect(images).toEqual(sampleBlogs.map((item) => item.image_url));
+  });
+
+  test('renders no grid when the response is empty', async () => {
+    httpClient.get.mockResolvedValue({ data: [] });
+    const wrapper = await renderGrid();
 
     expect(wrapper.find('[data-testid="blog-carousel-list"]').exists()).toBe(false);
   });
 
-  test('next button increments currentIndex when not at last page', async () => {
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
+  test('opens the last blog through its card', async () => {
+    const wrapper = await renderGrid();
+
+    await wrapper.findAll('[data-testid="blog-carousel-item"]').at(-1).trigger('click');
     await flushPromises();
 
-    const list = wrapper.find('[data-testid="blog-carousel-list"]');
-    const styleBefore = list.attributes('style');
-
-    await wrapper.find('[data-testid="blog-carousel-next"]').trigger('click');
-
-    // Fails if next() advances to the wrong index (off-by-one) or if the
-    // translateX formula uses a divisor other than 5.
-    expect(list.attributes('style')).toContain('translateX(-20%');
+    expect(router.currentRoute.value.path).toBe('/blog/6');
   });
 
-  test('next button wraps currentIndex to 0 when at last page', async () => {
-    blogStore.blogs = sampleBlogs.slice(0, 5);
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
+  test('opens the blogs through its existing link', async () => {
+    const wrapper = await renderGrid();
+    const link = wrapper.findAll('a').find((item) => item.text() === 'Explore now');
+
+    await link.trigger('click');
     await flushPromises();
 
-    await wrapper.find('[data-testid="blog-carousel-next"]').trigger('click');
-
-    const list = wrapper.find('[data-testid="blog-carousel-list"]');
-    expect(list.attributes('style')).toContain('translateX(-0%');
+    expect(router.currentRoute.value.path).toBe('/blogs');
   });
 
-  test('prev button decrements currentIndex when not at first page', async () => {
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
+  test('preserves the non-English title behavior', async () => {
+    useLanguageStore().setCurrentLanguage('es');
+    const wrapper = await renderGrid();
 
-    await wrapper.find('[data-testid="blog-carousel-next"]').trigger('click');
-    const styleAfterNext = wrapper.find('[data-testid="blog-carousel-list"]').attributes('style');
-
-    await wrapper.find('[data-testid="blog-carousel-prev"]').trigger('click');
-
-    // Fails if prev() does not land back on exactly index 0 after next()+prev().
-    expect(wrapper.find('[data-testid="blog-carousel-list"]').attributes('style')).toContain('translateX(-0%');
-  });
-
-  test('prev button wraps to last page when at index 0', async () => {
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    await wrapper.find('[data-testid="blog-carousel-prev"]').trigger('click');
-
-    const list = wrapper.find('[data-testid="blog-carousel-list"]');
-    // Fails if the wrap from index 0 lands on any page other than the last
-    // one (Math.ceil(6/5)-1=1), not just "something other than 0".
-    expect(list.attributes('style')).toContain('translateX(-20%');
-  });
-
-  test('startCarousel sets up auto-advance interval', async () => {
-    mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const stylesBefore = [];
-    jest.advanceTimersByTime(3000);
-    stylesBefore.push(true);
-
-    expect(stylesBefore.length).toBe(1);
-  });
-
-  test('stopCarousel clears interval on unmount', async () => {
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const clearSpy = jest.spyOn(global, 'clearInterval');
-    wrapper.unmount();
-
-    expect(clearSpy).toHaveBeenCalled();
-  });
-
-  test('stopCarousel does not call clearInterval when interval was never started', async () => {
-    blogStore.blogs = [];
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const clearSpy = jest.spyOn(global, 'clearInterval');
-    wrapper.unmount();
-
-    expect(clearSpy).not.toHaveBeenCalled();
-  });
-
-  test('auto-advance moves to next slide after 3 seconds', async () => {
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const styleBefore = wrapper.find('[data-testid="blog-carousel-list"]').attributes('style');
-    jest.advanceTimersByTime(3000);
-    await nextTick();
-
-    // Fails if the setInterval callback advances to the wrong index (or not
-    // at all) on the first 3s tick.
-    expect(wrapper.find('[data-testid="blog-carousel-list"]').attributes('style')).toContain('translateX(-20%');
-  });
-
-  test('does not render blog title span when language is not en', async () => {
-    const languageStore = useLanguageStore();
-    languageStore.setCurrentLanguage('es');
-
-    const wrapper = mount(BlogCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    expect(wrapper.findAll('[data-testid="blog-carousel-item"]').length).toBe(sampleBlogs.length);
-    const titleSpans = wrapper.findAll('[data-testid="blog-carousel-item"] h3 span');
-    expect(titleSpans.length).toBe(0);
+    expect(wrapper.findAll('[data-testid="blog-carousel-item"] h3 span')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="blog-carousel-item"] p').text()).toBe('Category 1');
   });
 });

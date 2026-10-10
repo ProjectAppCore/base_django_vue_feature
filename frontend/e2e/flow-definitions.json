@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "lastUpdated": "2026-10-10",
   "flows": {
     "auth-login-email": {
@@ -147,11 +147,11 @@
       "outcomes": ["display"]
     },
     "home-carousel-navigate": {
-      "name": "Navigate home page carousels",
+      "name": "Navigate home trending grids",
       "module": "home",
       "roles": ["shared"],
       "priority": "P3",
-      "description": "User navigates product and blog carousels on the home page",
+      "description": "At 835x1194, 412x915, 1195x835, 1440x900 and 2560x1440, the home page shows all received products and blogs in order in 2, 1, 5, 5 and 5 columns. The last card is reachable by normal page scrolling and opens its matching detail ID and title. No arrows, transforms or autoplay; component names and this flow ID are retained.",
       "outcomes": ["success"]
     },
     "header-search": {
@@ -159,7 +159,7 @@
       "module": "navigation",
       "roles": ["shared"],
       "priority": "P2",
-      "description": "User opens the search modal, types a query, and closes it",
+      "description": "At 835x1194, 412x915, 1195x835, 1440x900 and 2560x1440, user opens search directly from the header through a target at least 44x44px, without opening the mobile menu, enters a real product title and follows its result to the matching detail. The existing close button closes search; header actions remain reachable without horizontal document overflow.",
       "outcomes": ["success"]
     },
     "header-cart-overlay": {
@@ -167,7 +167,7 @@
       "module": "navigation",
       "roles": ["shared"],
       "priority": "P2",
-      "description": "User opens the shopping cart from the header with its panel and Checkout link immediately available, without decorative entrance or exit animation. The close button or backdrop immediately updates parent visibility. Reopening preserves items, quantities, subtotal and cart storage, and allows another close.",
+      "description": "At 835x1194, 412x915, 1195x835, 1440x900 and 2560x1440, user adds a real product through catalog UI and opens the cart directly from the header through controls at least 44x44px. The panel and Checkout link are immediately available without decorative animation. Closing and reopening preserves title, quantity, subtotal and storage, and allows navigation to Checkout. The empty cart retains its message and catalog link. The backdrop closes the cart where it is exposed at widths at least 1024px; full-width compact and portrait panels use the close button.",
       "outcomes": ["success", "display"]
     },
     "theme-toggle": {
@@ -175,7 +175,7 @@
       "module": "navigation",
       "roles": ["shared"],
       "priority": "P4",
-      "description": "User switches between Light/Dark/System theme from the header menu and the preference persists",
+      "description": "At 835x1194, 412x915, 1195x835, 1440x900 and 2560x1440, a single ThemeToggle is available directly in the header, without opening the mobile menu. Its trigger and options are at least 44px high; user selects Light/Dark/System and the preference persists after reload. Header controls remain within the viewport.",
       "outcomes": ["success"]
     },
     "not-found-page": {
