@@ -26,7 +26,8 @@ test.describe('Shopping — product detail', () => {
     const product = await response.json();
     await page.getByRole('link', { name: product.title, exact: true })
       .and(page.locator('[href="/product/10"]')).click();
-    await expect(page).toHaveURL(/\/product\/\d+/);
+    await expect(page).toHaveURL('/product/10');
+    await page.mouse.move(0, 0);
 
     // Actions render under v-if="product": wait for the product to load.
     await expect(page.getByTestId('add-to-cart')).toBeVisible({ timeout: 15000 });
