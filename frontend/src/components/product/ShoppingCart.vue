@@ -122,23 +122,7 @@
     });
 
     const closeCart = () => {
-        const tl = gsap.timeline({
-            onComplete: () => {
-                emit("update:visible", false);
-            },
-        });
-        tl.fromTo(
-            cart.value,
-            { x: 0 },
-            { x: cart.value.offsetWidth, duration: 1, ease: "power2.inOut" },
-            0,
-        );
-        tl.fromTo(
-            background.value,
-            { opacity: 1 },
-            { opacity: 0, duration: 1, ease: "power2.inOut" },
-            0,
-        );
+        emit("update:visible", false);
     };
 
     /**
