@@ -155,8 +155,10 @@ tampoco bastó: el contexto volvió a cerrarse durante la preparación.
 El Verifier confirmó en los resultados de Playwright un presupuesto total
 efectivo de 30 segundos. El orquestador proporcionó un config temporal ignorado
 que importa la configuración original y concede 90 segundos al escenario,
-manteniendo 5 segundos por comprobación, 30 por acción o navegación, un worker
-y cero reintentos. Conserva proyecto, viewport, acciones, animaciones y código
+manteniendo 5 segundos por comprobación y límites globales de 30 segundos por
+acción o navegación. El fixture original del spec conserva límites más
+estrictos de 10 segundos por acción y 25 por navegación. Usa un worker y cero
+reintentos. Conserva proyecto, viewport, acciones, animaciones y código
 de pruebas. La primera ejecución pasó los cinco casos en 44,4 segundos; un
 error de nombres de variables del reporter exigió repetir únicamente para
 capturar JSON/JUnit reales, sin reconstruirlos a partir de la conclusión.
@@ -175,6 +177,45 @@ checkout en su primer intento, mediante el artefacto oficial de
 [run 38059507034](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38059507034).
 Un caso ajeno de `shopping-cart-add` necesitó un retry; queda registrado como
 inestabilidad fuera del alcance, sin ampliar la ronda para corregirlo.
+
+### Bloqueo posterior, conservado sin atribución especulativa
+
+La actualización documental produjo el tren limpio
+`463bd6a8b67bee0dad5574b818dbe212e69b0f94`. El Verifier comprobó que backend,
+frontend, scripts y CI conservaban los mismos trees que `917a42e`; no atribuyó
+los 84 backend ni los 10 unit previos a una ejecución nueva. La única repetición
+E2E afectada pasó cuatro casos y falló uno en 52,556 segundos: antes de probar
+HTTP 500, `cart-close` no desmontó `cart-overlay` dentro de la aserción de cinco
+segundos (`shopping-checkout.spec.js:19-20`). El manifest local sigue
+**REJECTED**. No se borraron ni sustituyeron sus JSON/JUnit y contexto de error.
+
+El artefacto oficial del mismo SHA sí acredita **5/5 checkout en primer intento**
+sobre Django/Vite reales y SQLite efímera, incluido POST 201 sin interceptar
+éxito: [CI 38064120548](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38064120548).
+La auditoría del Verifier confirmó su procedencia. Tres casos ajenos necesitaron
+un retry: dos de carrito por enlaces ausentes y uno de backoffice por email
+duplicado. Ninguno de esos fallos aporta evidencia sobre el cierre del overlay.
+
+El dueño ejecutó una reproducción aislada HTTP 500: pasó sin retries en
+18,682 segundos. La espera de cierre duró 2,797 segundos; era compatible con
+retraso, pero no explicaba el fallo sin una traza de ese cierre fallido.
+Se autorizaron después **dos capturas diagnósticas como máximo**, con hooks
+pasivos ignorados y el spec original: clic real, estilos y muestras de frames
+a cinco por segundo, sin alterar estado, acciones o límites de pruebas.
+Ambas pasaron 5/5, sin retries, en 36,780 y 33,263 segundos; registraron el
+desmontaje entre 1,088 y 1,253 segundos después de pulsar cerrar. No capturaron
+la intermitencia ni hubo errores del navegador. La presión CPU de esas
+ejecuciones verdes no prueba qué causó la anterior.
+
+La causa sigue **INCONCLUSA**; no hay propuesta de cambio respaldada por esa
+evidencia. No se modificaron `ShoppingCart.vue`, el helper ni las pruebas para
+eludir el cierre. Los artefactos y hashes están en
+`463bd6a/diagnostic-http500-owner/` y
+`463bd6a/diagnostic-cart-frames-owner/diagnostic-summary.json`. Se agotó el
+límite diagnóstico acordado, sin repetir hasta obtener verde. Al registrar
+esta decisión, los tres PR y el tren tienen CI verde, pero **la integración
+permanece detenida por el rechazo local de QA**. El cierre y cualquier decisión
+posterior se consignan en los cuerpos de los PR.
 
 El primer CI de observabilidad descubrió una diferencia que el fixture sin
 imágenes no reproducía: el cursor del click en catálogo permanecía sobre la
@@ -223,5 +264,7 @@ diagnóstico conjunto. El push mostró 62 avisos de dependencias en la base,
 32 clasificados altos por GitHub; esta ronda no confirmó su alcanzabilidad ni
 los remedió. SQLite no certifica concurrencia/locks MySQL. La ejecución E2E
 local requiere el presupuesto ambiental documentado; el caso CI ajeno de
-carrito sigue necesitando diagnóstico de su inestabilidad. No se certifica
+carrito y backoffice sigue necesitando diagnóstico de su inestabilidad. El
+cierre intermitente del carrito conserva un rechazo local sin causa atribuida,
+aunque CI y las capturas diagnósticas pasan. No se certifica
 despliegue ni infraestructura.
