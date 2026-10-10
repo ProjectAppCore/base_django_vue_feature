@@ -1,270 +1,243 @@
 # Ronda de mejora del 10 de octubre de 2026
 
-## Alcance y decisiones
+## Alcance y criterio
 
-Proyecto: `base_django_vue_feature`, plantilla Django/DRF + Vue/Vite sin
-tráfico ni servicios activos. Base de diagnóstico:
-`122c6fdb001faa33938a0ac5a8506d712d43723f` (`origin/master`).
+Proyecto `base_django_vue_feature`: template Django/DRF + Vue/Vite. Los
+comportamientos son ejemplos para nuevos proyectos. Se priorizaron identidad
+verificada, consistencia de datos y confirmaciones verdaderas; se simplificó
+la decoración del carrito para que no condicione su uso.
 
-Se diagnosticaron seis frentes mediante agentes independientes de lectura.
-El operador confirmó un máximo de **tres causas globales** y eligió publicar
-la evidencia en este proyecto. El toolkit se conserva en lectura, sin
-modificar su ledger ni hacer push; la selección utilizó el preview canónico
-de `improvement-ledger.sh --refresh --check`.
+Base de diagnóstico: `122c6fdb001faa33938a0ac5a8506d712d43723f`
+(`origin/master`). Las referencias de línea de los hallazgos corresponden a
+esa base. Se diagnosticaron seis frentes mediante agentes independientes de
+lectura. El operador confirmó un máximo de **tres causas globales**. Cada
+archivo tuvo un único dueño; el orquestador coordinó decisiones, Git,
+infraestructura de prueba e informe, sin implementar los frentes.
 
-| Frente | Diagnóstico | Decisión de esta ronda |
+Sólo se admitieron impacto ALTO, o MEDIO con esfuerzo BAJO y riesgo BAJO.
+No modificar el template era un resultado válido. El toolkit se mantuvo en
+lectura: sin ledger, memoria, reportes ni push. La selección utilizó el preview
+canónico de `improvement-ledger.sh --refresh --check`.
+
+| Frente | Estado del diagnóstico | Decisión y trabajo |
 |---|---|---|
-| Seguridad | VALE LA PENA | Corregir identidad Google no verificada |
-| Mantenibilidad | VALE LA PENA | Guía heredada incorrecta: pendiente por cupo |
-| Observabilidad | VALE LA PENA | Corregir venta parcial y falso éxito del checkout |
-| Rendimiento | VALE LA PENA | Peticiones simultáneas duplicadas: pendiente por cupo |
+| Seguridad | VALE LA PENA | Identidad Google verificada; PR #16 |
+| Mantenibilidad | VALE LA PENA | Guía operativa incorrecta: pendiente por cupo |
+| Observabilidad | VALE LA PENA | Venta atómica y checkout que conserva datos ante fallos; PR #17 |
+| Rendimiento | VALE LA PENA | GET concurrentes duplicados: pendiente por cupo |
 | Responsividad | VALE LA PENA | Acciones móviles, carruseles y galería: pendientes por cupo |
-| QA | VALE LA PENA | Validar las tres causas, sin candidato discrecional adicional |
+| QA | VALE LA PENA | Regresiones de las tres causas y contratos observables del carrito; soporte sin cuarta causa |
 
-La suficiencia no se certifica para todo el proyecto. Los diagnósticos
-delimitaron código inspeccionado y evidencia pendiente; en particular no se
-validó visualmente la matriz responsive ni se completó una auditoría de
-dependencias.
+Estos estados no certifican todo el frente ni todo el template. No hubo
+validación visual de la matriz responsive ni auditoría completa de dependencias.
 
-## Causas seleccionadas
+## Tres causas implementadas
 
 ### I-S-90444e54f0be: identidad Google no requerida
 
 **Impacto ALTO / esfuerzo BAJO / riesgo BAJO.**
 
-`backend/base_feature_app/services/auth_service.py:104` omitía la verificación
-cuando faltaba credencial y seleccionaba una cuenta por el correo del body.
-`backend/base_feature_app/views/auth.py:104` emitía sus tokens. Una reproducción
-de la función real por AST, con usuario staff ficticio y almacenamiento en
-memoria, devolvió la cuenta existente sin llamar al verificador.
+`backend/base_feature_app/services/auth_service.py:104` seleccionaba una cuenta
+por el correo del body cuando faltaba credencial;
+`backend/base_feature_app/views/auth.py:104` emitía sus tokens. Ejecutar la
+función real extraída por AST con una cuenta ficticia reprodujo el bypass sin
+llamar al verificador.
 
-La corrección exige token verificado contra la audiencia configurada y correo
-verificado del payload; nunca usa el body para elegir identidad. Sin credencial
-válida devuelve 401; sin Client ID, 503; cuenta inactiva, 403 antes de modificarla.
-Mantiene el éxito 200, alias `id_token` y estructura de tokens/`created`.
+Se exige credencial verificada contra la audiencia configurada y correo
+verificado del payload. El body no elige identidad. Credencial inválida produce
+401; ausencia de Client ID, 503; cuenta inactiva, 403 antes de modificarla.
+Se conserva HTTP 200, alias `id_token` y estructura `user/access/refresh/created`.
+El mock se limita a la frontera externa de Google, sin sustituir la lógica
+que resuelve el payload.
 
-QA requerida: casos de rechazo sin tokens ni mutaciones, audiencia/claims
-inválidos, configuración ausente, cuenta inactiva y autenticación válida con
-correo del body contradictorio. El mock se limita al verificador Google externo.
+Autor: seguridad. Commit `c070a58e57064d56e8a5a88bd01d5132611afebe`.
+PR: [#16](https://github.com/ProjectAppCore/base_django_vue_feature/pull/16).
+Cuatro archivos aprobados, sin cambios de configuración ni dependencias.
 
 ### I-O-52fee3da1120: creación de venta no atómica
 
 **Impacto ALTO / esfuerzo BAJO / riesgo BAJO.**
 
-`backend/base_feature_app/serializers/sale.py:20` guardaba cabecera y líneas
-antes de descubrir un producto inexistente, sin transacción. Ejecutar el cuerpo
-real con SQLite en memoria y referencias `[1, 999]` dejó una venta, una línea
-y una relación tras fallar. La prueba vigente aceptaba `DoesNotExist` sin
-comprobar residuos.
+`backend/base_feature_app/serializers/sale.py:20` persistía cabecera y líneas
+antes de detectar un producto inexistente. Ejecutar el cuerpo real con SQLite
+scratch y referencias `[1, 999]` dejó residuos tras fallar. La prueba anterior
+aceptaba la excepción sin comprobar esos residuos.
 
-La corrección valida referencias y revierte toda la creación si falla. Una
-referencia inválida o desaparecida produce 400; la venta válida conserva 201,
-productos y cantidades. QA comprueba filas y relaciones, incluido un fallo
-después de comenzar a guardar las líneas.
+La creación ahora valida referencias y usa una transacción. Una referencia
+inválida o desaparecida produce 400; una venta válida conserva 201, productos,
+cantidades y orden. Un fallo inesperado después de iniciar las líneas se
+propaga y revierte cabecera, líneas y relaciones. Las filas se bloquean en
+orden; SQLite no acredita la concurrencia ni los locks de MySQL.
 
-### I-O-8e037499c22c: checkout confirma antes de recibir respuesta
+### I-O-8e037499c22c: éxito de checkout anterior a la respuesta
 
 **Impacto ALTO / esfuerzo BAJO / riesgo BAJO.**
 
-`frontend/src/views/product/Checkout.vue:227` no esperaba la creación y borraba
-el carrito, anunciaba éxito y navegaba inmediatamente. El store silenciaba el
-rechazo. Ejecutar los cuerpos reales con HTTP rechazado reprodujo esa pérdida.
-El E2E sólo exigía salir de checkout y limpiaba almacenamiento durante la
-navegación, por lo que tampoco demostraba un pedido con artículos.
+`frontend/src/views/product/Checkout.vue:227` no esperaba la creación: borraba
+el carrito y anunciaba éxito inmediatamente. El store silenciaba el rechazo.
+Ejecutar los cuerpos reales con HTTP rechazado reprodujo la pérdida; el E2E
+anterior sólo exigía salir de la página.
 
-La corrección espera la respuesta, impide envíos simultáneos y conserva carrito
-y formulario ante fallos. Sólo tras creación confirmada limpia y navega. La demo
-no cobra tarjetas: la confirmación describe el pedido, sin afirmar un cobro.
+Ahora la interfaz espera creación confirmada, impide envíos simultáneos y
+conserva carrito y formulario ante 400/500/interrupción de red. Sólo después
+limpia y navega. La demo no procesa tarjetas; su mensaje confirma un pedido,
+sin afirmar un cobro. El E2E exige POST 201 real y artículos agregados por la
+interfaz; no intercepta el éxito ni limpia datos durante la navegación.
 
-QA requerida: pendiente, segundo envío, HTTP 400/500, interrupción de red y
-POST 201 real. Actualizar el flujo existente con `failure`, sin duplicar su
-happy path.
+Autor de ambas causas: observabilidad. Head final de implementación
+`a281f15da0e92822691171e6f5a0faa326b33901`.
+PR: [#17](https://github.com/ProjectAppCore/base_django_vue_feature/pull/17).
+Trece archivos aprobados, incluidos pruebas y mapa de flujos existente.
 
-## Pendientes por cupo, sin descartarlos por bajo retorno
+## Simplificación conservadora del carrito
 
-- Guía canónica que prescribe Nuxt, app `content` y `build:django` inexistentes
-  (`CLAUDE.md:254,571,641`): MEDIO / BAJO / BAJO.
-- Dos consumidores concurrentes disparan dos GET antes de activar el cache
-  (`frontend/src/stores/product.js:62`, `blog.js:28`): MEDIO / BAJO / BAJO.
-- Header oculta los únicos accesos al carrito y búsqueda bajo `lg`, sin
-  reemplazo móvil (`frontend/src/components/layouts/Header.vue:35`): ALTO / BAJO / MEDIO.
-- Carruseles calculan desplazamiento/límite para cinco tarjetas aunque muestren
-  una o dos (`ProductCarousel.vue:23`, `BlogCarousel.vue:24`): ALTO / MEDIO / MEDIO.
-- Galería oculta su único selector bajo `sm`
-  (`frontend/src/views/product/Detail.vue:12`): ALTO / BAJO / MEDIO.
+**Soporte QA de checkout: MEDIO / BAJO / BAJO; no cuarta causa.**
 
-## Descartes y condiciones para reevaluar
+El cierre dependía del callback de salida decorativa. Se simplificó para que
+el padre actualice inmediatamente la visibilidad y Vue retire panel/backdrop.
+Pruebas con padre real y callbacks sin completar demostraron el contrato:
+tres casos fallaban con el cierre anterior y pasan con el cierre inmediato
+(commit `035a2808d32cd3d280cf2a55a83616d3e5fd6f16`). El escenario existente
+comprueba cierre por backdrop, reapertura con datos preservados y cierre por botón.
 
-- Extraer normalización de URLs duplicada: beneficio bajo sin divergencia ni
-  cambio pendiente; reevaluar si la regla comienza a divergir.
-- Unificar estilos de stores o abstracciones CRUD por semejanza: sin fallo o
-  operación bloqueada demostrados; no justificar por longitud o preferencias.
-- Incorporar APM, tracing o monitoreo del scaffold: el registro excluye esta
-  plantilla y no hay tráfico ni incidente que justifique el coste.
-- Cambios estéticos responsive sin pérdida demostrada de utilidad: retorno
-  insuficiente.
-- Precarga de galerías, paginación, lazy loading o índices: sin medición SQL,
-  tamaños o carga reales; mantener como evidencia pendiente, sin rediseñar APIs.
+La comprobación posterior sobre `638bd28c49cf06eeb6ef3c64998274a920fdfded`
+pasó seis de siete E2E. La traza restante mostró el panel desplazándose mientras
+el clic en Checkout agotaba sus 10 segundos, antes de instalar `route.abort`.
+El mismo ancestro animado cambiaba de `translate3d(511.859px,0,0)` a su posición
+final. Esto acredita la dependencia decorativa; no explica por qué la animación
+nominal duró más ni atribuye causalidad a la CPU.
+Traza SHA256: `5ee7096dccfa0b7f1b9b14d9e7ada08259393259401b63b11efca84d9f8e74ac`.
 
-## Verificación y cierre
+Con el criterio template autorizado se retiró también la entrada GSAP
+(`a281f15`). Apertura y cierre son declarativos; se conservan scroll lock,
+productos, cantidades, subtotal y almacenamiento al reabrir. La prueba de
+llamadas a GSAP fue sustituida por apertura y navegación a Checkout mediante
+router real. QA aprobó el contenido y el alcance; el Verifier aprobó después la ejecución combinada. Los dos E2E quedaron
+byte-idénticos respecto de `5f8f2a4`; sin sleeps, retries, nuevos timers ni
+aserciones debilitadas. Sólo se precisó el flujo `header-cart-overlay`, sin
+inventar otro flujo.
 
-La autoría y pruebas pertenecen a seguridad y observabilidad. El orquestador
-sólo coordina Git, dependencias de prueba, configuración scratch e informe.
-Cada archivo tiene un único dueño. No se incluyen cambios de producto fuera
-de las tres causas.
+## Verificación y procedencia
 
-La QA final se ejecuta sobre un SHA combinado limpio: pytest por selecciones,
-Jest acotado y Playwright con Django/Vite que sirven ese contenido. La base
-SQLite es desechable, creada mediante las herramientas de bases de pruebas de
-Django, sin `manage.py migrate` ni lectura de `.env`. Los artefactos de ejecución
-se guardan en `test-results/improvement/2026-10-10-base-improvement/`, ignorado.
-Se exige el gate con severidad CI y auditoría final de flujos.
+La verificación usa SHA combinado limpio, SQLite desechable, producto con
+Attachment PNG real 128×128 y build de producción servido por Vite preview.
+No se leyó `.env`, ejecutó `manage.py migrate` ni tocó el checkout principal.
+Backend y frontend sirvieron los inputs consignados en los manifests.
 
-Evidencia obtenida antes de incorporar este informe al tren:
+**QA independiente APPROVED** sobre
+`aa7f3a3993a38d5d285a55c16415e4e114035031` / tree
+`20f3fc1cf32151b5422dd4d4e24fa86754a03e06`, con árbol limpio.
+Manifest y veredicto: `aa7f3a3/verification/{manifest.json,qa-verdict.md}`.
+Los siete E2E pasaron en una ejecución, sin retries, skips ni flaky, incluidos
+POST 201 real, fallos 400/500/red y reapertura del carrito.
 
-| Capa | Resultado | Evidencia |
+| Capa | Resultado acreditado | Procedencia |
 |---|---|---|
-| Backend Google | 72 casos distintos pasan | Seis lotes pytest, máximo 16 por comando |
-| Backend ventas | 12 casos pasan | Referencias inválidas, desaparición, rollback de segunda línea y contrato HTTP |
-| Frontend unit | 10 casos ejecutados pasan | Componente con store real y frontera HTTP; 20 casos ajenos excluidos por selección |
-| E2E checkout | 5 casos pasan con imagen real | POST 201 sin interceptar éxito; validación y fallos 400/500/red |
-| Gate combinado | Cero errores; cuatro warnings | Siete archivos, lint externo activo, reglas strict y severidad CI |
-| Flujos | 30 cubiertos y uno exento | Cero parciales, junk-only o missing; checkout success/error/failure; Google exento |
+| Google backend | 72 casos distintos pasan | Seis lotes pytest, máximo 16 por comando |
+| Ventas backend | 12 casos pasan | Referencias inválidas, desaparición, rollback y contratos 400/201 |
+| Checkout/store unit | 10 casos pasan | Componente/store reales, mock HTTP en frontera |
+| Carrito unit | 18 casos pasan | Apertura/navegación, cierre y reapertura/conservación |
+| E2E | 7/7 pasan en 63,783 segundos | Dos specs, siete casos, sin retries |
+| Gate combinado | Cero errores, nueve avisos; nueve archivos/102 definiciones | Lint externo, reglas strict y severidad CI |
+| Flujos | 30 cubiertos, uno exento | Cero faltantes/junk; Google exento |
 
-Las ejecuciones iniciales de backend/unit corresponden a
-`d0ccf4f778706b82836551ea6cd3075e056d2f38`. La repetición E2E con imagen y
-auditorías afectadas corresponde a `8b463cb4f00db976a8b23a6ed3c597a0368fa997`.
-La incorporación del informe sólo añade Markdown; el Verifier vuelve a
-comprobar lo afectado sobre el SHA final limpio. El manifest conserva el SHA
-real de cada ejecución y demuestra qué entradas ejecutables permanecen
-idénticas; no atribuye ejecuciones antiguas a un commit nuevo. Los PRs consignan
-el SHA final y el resultado de CI antes de integrar.
+Los 84 backend y 10 unit de checkout/store corresponden a ejecución real sobre
+`917a42e8908e02d1bff84729bc55c325621b705f`. Sus inputs se conservaron idénticos;
+no se reasignó una ejecución previa a un SHA nuevo. El carrito y E2E afectados
+se verificaron en la combinación nueva
+`aa7f3a3993a38d5d285a55c16415e4e114035031`. Build, hashes servidos y controles
+HTTP están en `aa7f3a3/{build.json,runtime-live.json}`. El backend fue iniciado
+desde `c209207`, con tree de backend idéntico al actual; el preview fue
+reconstruido desde el SHA nuevo. El documento final sólo modifica Markdown; su incorporación se comprueba
+por equivalencia de inputs, conservando el SHA real de las pruebas.
+El CI fuente de observabilidad también tiene sus cinco checks verdes sobre
+`a281f15`: [Tests 38073884581](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38073884581)
+y [Gate 38073884612](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38073884612).
 
-La comprobación sobre `917a42e8908e02d1bff84729bc55c325621b705f` volvió a
-pasar los 84 casos backend y los 10 unit, pero rechazó el checkout: los cinco
-E2E combinados fallaron y el éxito aislado también. Los otros cuatro escenarios
-aislados pasaron. Esos resultados se conservaron; el CI verde no los sustituyó.
+Los artefactos reales se guardan bajo
+`test-results/improvement/2026-10-10-base-improvement/`, ignorado, y se archivan
+fuera de los worktrees antes de retirarlos. Cada manifest conserva el SHA real,
+comandos, límites, resultados y evidencia heredada explícitamente.
 
-Una traza posterior se agotó antes de añadir el producto: navegar al catálogo
-costó 20,465 segundos y varios módulos locales tardaron 3,4–3,8 segundos.
-El host tenía seis CPUs, carga de 30,30 y presión CPU de 77,77 %. La traza
-demostró retrasos generales y agotamiento del presupuesto, sin demostrar un
-fallo del cierre del carrito. Servir el build de producción del mismo código
-tampoco bastó: el contexto volvió a cerrarse durante la preparación.
+### Fallos previos conservados y metodología
 
-El Verifier confirmó en los resultados de Playwright un presupuesto total
-efectivo de 30 segundos. El orquestador proporcionó un config temporal ignorado
-que importa la configuración original y concede 90 segundos al escenario,
-manteniendo 5 segundos por comprobación y límites globales de 30 segundos por
-acción o navegación. El fixture original del spec conserva límites más
-estrictos de 10 segundos por acción y 25 por navegación. Usa un worker y cero
-reintentos. Conserva proyecto, viewport, acciones, animaciones y código
-de pruebas. La primera ejecución pasó los cinco casos en 44,4 segundos; un
-error de nombres de variables del reporter exigió repetir únicamente para
-capturar JSON/JUnit reales, sin reconstruirlos a partir de la conclusión.
-La captura posterior pasó **5/5 en 42,1 segundos**, sin reintentos, skips ni
-flaky. El Verifier aprobó las tres causas sobre
-`917a42e8908e02d1bff84729bc55c325621b705f`: 84 casos backend, 10 unit y cinco
-E2E; gate sin errores y flujos sin brechas adicionales. Los JSON/JUnit reales
-están en `917a42e/environment90/checkout.{json,xml}`, junto al manifest y el
-veredicto. Esa ejecución usó el build de producción servido por Vite preview;
-su procedencia y controles HTTP están en `917a42e/runtime-built.json`.
-El PR consigna también la comprobación afectada tras este cambio documental.
-No se aplicó un cambio de producto por esta limitación ambiental.
+Los rechazos locales permanecen documentados; el CI verde no los sustituyó.
+La preparación inicial E2E en servidor de desarrollo agotó el presupuesto
+total de 30 segundos bajo retrasos generales del host. Se utilizó un config
+ambiental ignorado con 90 segundos por escenario, manteniendo 5 por aserción,
+30 globales por acción/navegación y los límites más estrictos del fixture
+original: 10 por acción y 25 por navegación. Un worker, retries 0 y trazas de fallo.
+Esos mismos límites se conservaron al simplificar el carrito.
 
-El CI de integración sobre ese SHA también acredita los cinco casos de
-checkout en su primer intento, mediante el artefacto oficial de
-[run 38059507034](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38059507034).
-Un caso ajeno de `shopping-cart-add` necesitó un retry; queda registrado como
-inestabilidad fuera del alcance, sin ampliar la ronda para corregirlo.
+El cierre intermitente histórico sobre `463bd6a` quedó sin causa atribuida:
+CI pasó; un replay aislado y dos capturas pasivas pasaron, sin reproducirlo.
+No se dedujo causalidad de presión CPU ni se repitió indefinidamente hasta verde.
+La simplificación posterior se justifica por el contrato observable y por la
+traza concreta del movimiento de entrada, bajo la autorización para simplificar
+los ejemplos del template.
 
-### Bloqueo posterior, conservado sin atribución especulativa
+Una primera ejecución de `638bd28` sólo pasó 1/7 porque el orquestador omitió
+`VITE_BACKEND_URL` al iniciar preview: `/api/products/` fue enviado al puerto 8000
+sin backend y devolvió 500. Se corrigió exclusivamente el inicio del runtime,
+se comprobó el API 200 desde el mismo origen del navegador y la ejecución
+posterior pasó 6/7, exponiendo el movimiento de entrada. Se preservan ambas
+ejecuciones y su causa; no se cambió aplicación/configuración por ese error.
 
-La actualización documental produjo el tren limpio
-`463bd6a8b67bee0dad5574b818dbe212e69b0f94`. El Verifier comprobó que backend,
-frontend, scripts y CI conservaban los mismos trees que `917a42e`; no atribuyó
-los 84 backend ni los 10 unit previos a una ejecución nueva. La única repetición
-E2E afectada pasó cuatro casos y falló uno en 52,556 segundos: antes de probar
-HTTP 500, `cart-close` no desmontó `cart-overlay` dentro de la aserción de cinco
-segundos (`shopping-checkout.spec.js:19-20`). El manifest local sigue
-**REJECTED**. No se borraron ni sustituyeron sus JSON/JUnit y contexto de error.
+El fixture con imagen real también reveló que el cursor activaba zoom de la
+imagen de detalle y ocultaba el botón de compra. El autor corrigió el helper
+para comprobar la navegación y sacar el cursor de la imagen (`1a9f8fd`),
+sin sleeps ni aumento de límites. El gate previo descubrió tres errores de
+lint; tras informar la detención, su dueño los corrigió en archivos autorizados.
 
-El artefacto oficial del mismo SHA sí acredita **5/5 checkout en primer intento**
-sobre Django/Vite reales y SQLite efímera, incluido POST 201 sin interceptar
-éxito: [CI 38064120548](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38064120548).
-La auditoría del Verifier confirmó su procedencia. Tres casos ajenos necesitaron
-un retry: dos de carrito por enlaces ausentes y uno de backoffice por email
-duplicado. Ninguno de esos fallos aporta evidencia sobre el cierre del overlay.
+## Pendientes por cupo
 
-El dueño ejecutó una reproducción aislada HTTP 500: pasó sin retries en
-18,682 segundos. La espera de cierre duró 2,797 segundos; era compatible con
-retraso, pero no explicaba el fallo sin una traza de ese cierre fallido.
-Se autorizaron después **dos capturas diagnósticas como máximo**, con hooks
-pasivos ignorados y el spec original: clic real, estilos y muestras de frames
-a cinco por segundo, sin alterar estado, acciones o límites de pruebas.
-Ambas pasaron 5/5, sin retries, en 36,780 y 33,263 segundos; registraron el
-desmontaje entre 1,088 y 1,253 segundos después de pulsar cerrar. No capturaron
-la intermitencia ni hubo errores del navegador. La presión CPU de esas
-ejecuciones verdes no prueba qué causó la anterior.
+Son elegibles y quedan fuera por el máximo de tres causas, no por bajo retorno:
 
-La causa sigue **INCONCLUSA**; no hay propuesta de cambio respaldada por esa
-evidencia. No se modificaron `ShoppingCart.vue`, el helper ni las pruebas para
-eludir el cierre. Los artefactos y hashes están en
-`463bd6a/diagnostic-http500-owner/` y
-`463bd6a/diagnostic-cart-frames-owner/diagnostic-summary.json`. Se agotó el
-límite diagnóstico acordado, sin repetir hasta obtener verde. Al registrar
-esta decisión, los tres PR y el tren tienen CI verde, pero **la integración
-permanece detenida por el rechazo local de QA**. El cierre y cualquier decisión
-posterior se consignan en los cuerpos de los PR.
+- Guía canónica Nuxt/`content`/`build:django` inexistentes
+  (`CLAUDE.md:254,571,641`): MEDIO/BAJO/BAJO.
+- GET simultáneos duplicados antes de activar cache (`product.js:62`,
+  `blog.js:28`): MEDIO/BAJO/BAJO.
+- Header oculta los únicos accesos a carrito y búsqueda bajo `lg`
+  (`Header.vue:35`): ALTO/BAJO/MEDIO.
+- Carruseles usan desplazamiento/límite para cinco tarjetas aunque muestren
+  una o dos (`ProductCarousel.vue:23`, `BlogCarousel.vue:24`): ALTO/MEDIO/MEDIO.
+- Galería oculta su único selector bajo `sm` (`Detail.vue:12`): ALTO/BAJO/MEDIO.
 
-El primer CI de observabilidad descubrió una diferencia que el fixture sin
-imágenes no reproducía: el cursor del click en catálogo permanecía sobre la
-imagen de detalle, activaba zoom y retiraba temporalmente el botón de compra.
-La traza oficial mostraba zoom `scale(4)` en `/product/12`. El implementador
-corrigió únicamente el helper E2E para comprobar navegación y sacar el cursor
-de la imagen, sin sleeps ni aumentos de timeout
-(`1a9f8fd865e4027eebeff447391d338f35dc26d2`). La repetición con un Attachment
-real de 128×128 pasó los cinco escenarios. No se ocultó el fallo con el pase
-previo del fixture vacío.
+## Descartes por retorno o evidencia insuficientes
 
-El gate de observabilidad también se detuvo tras dos ejecuciones fallidas por
-lint. El orquestador informó la detención y delimitó el desbloqueo; el mismo
-dueño corrigió tres líneas D204 dentro de sus archivos. El gate siguiente pasó.
-Las advertencias restantes no justificaron una limpieza adicional.
+- Extraer normalización de URL: beneficio bajo sin divergencia; reevaluar sólo si diverge.
+- Unificar estilos de stores o abstraer CRUD: sin fallo ni operación bloqueada demostrados.
+- APM/tracing para el scaffold: sin tráfico ni incidente que justifique su coste.
+- Retoques estéticos responsive: sin pérdida demostrada de utilidad.
+- Precarga/paginación/lazy loading/índices: sin medición de SQL, tamaño o carga reales.
 
-Los cuerpos de los PRs consignan commits, comandos, resultados y referencias
-de CI. `merge-queue` valida la combinación antes de integrar; su PR draft es
-un banco de pruebas y no se mergea. El cierre usa `all-in-base --check-only`
-y retira únicamente worktrees limpios con contenido confirmado en `master`.
+## Solicitudes atendidas e integración
 
-PRs de implementación: [seguridad #16](https://github.com/ProjectAppCore/base_django_vue_feature/pull/16)
-y [observabilidad #17](https://github.com/ProjectAppCore/base_django_vue_feature/pull/17).
+- Documentar contrato Google y decisiones/evidencia: únicamente este informe,
+  en `improve/compartido`; MEDIO/BAJO/BAJO. Sin reescribir las guías pendientes.
+- Proporcionar dependencias/runtime de prueba, base scratch e imagen real:
+  recursos ignorados y desechables. Sin manifests, lockfiles, migraciones ni
+  cambios de configuración desplegada.
+- Ninguna solicitud de implementación fuera de alcance tras el ajuste final.
 
-## Solicitudes atendidas por el orquestador
+PR de informe: [#18](https://github.com/ProjectAppCore/base_django_vue_feature/pull/18).
+`merge-queue` valida la combinación final en el PR draft
+[#19](https://github.com/ProjectAppCore/base_django_vue_feature/pull/19), que
+jamás se mergea. Sólo después de QA aprobada y CI verde se integran 16 → 17 → 18.
+`all-in-base --check-only` comprueba entrega y contenido en `origin/master`;
+se retiran únicamente worktrees propios limpios después del aterrizaje.
 
-- Documentar el contrato Google: incluido en este informe, sin ampliar la
-  corrección de aplicación ni reescribir las guías heredadas pendientes.
-- Proporcionar runtime y ejecución combinada: dependencias de prueba,
-  configuración scratch sin `.env`, producto con imagen y servidores locales.
-  Son recursos ignorados y desechables; no cambian manifests, lockfiles,
-  migraciones ni configuración desplegada.
-- Publicar decisiones/evidencia: único archivo rastreado de
-  `improve/compartido`, este informe. No se escribieron ledger, memoria QA ni
-  reportes en el toolkit.
-
-El censo encontró cinco ramas históricas sin PR abierto con commits propios:
+Cinco ramas históricas sin PR abierto se excluyeron, sin integrar ni borrar:
 `chore/17052026-vuln-audit`, `docs/15052026-add-git-branch-protocol`,
 `docs/16052026-claude-md-git-rules`, `docs/20082026-testing-standard` y
-`double-check-30042026`. Se excluyeron porque no pertenecen a esta ronda;
-no se integraron ni borraron. El checkout principal quedó intacto.
+`double-check-30042026`. El checkout principal y el toolkit quedaron intactos.
 
-Riesgos abiertos: acciones/contenido móviles pendientes; auditoría de
-dependencias incompleta; configuración de blacklist/renovación JWT que requiere
-diagnóstico conjunto. El push mostró 62 avisos de dependencias en la base,
-32 clasificados altos por GitHub; esta ronda no confirmó su alcanzabilidad ni
-los remedió. SQLite no certifica concurrencia/locks MySQL. La ejecución E2E
-local requiere el presupuesto ambiental documentado; el caso CI ajeno de
-carrito y backoffice sigue necesitando diagnóstico de su inestabilidad. El
-cierre intermitente del carrito conserva un rechazo local sin causa atribuida,
-aunque CI y las capturas diagnósticas pasan. No se certifica
-despliegue ni infraestructura.
+## Límites y riesgos abiertos
+
+Las acciones/contenidos móviles elegibles siguen pendientes. No se completaron
+la auditoría de dependencias ni el diagnóstico conjunto de blacklist/renovación
+JWT. GitHub reportó 62 avisos (32 altos, 26 moderados, 4 bajos); no se confirmó
+alcanzabilidad ni remedio en esta ronda. SQLite no certifica locks MySQL.
+CI histórico mostró retries en casos ajenos de carrito/backoffice: necesitan
+diagnóstico propio, sin atribuirlos a estos cambios. No se certifica todo el
+template, despliegue ni infraestructura.
