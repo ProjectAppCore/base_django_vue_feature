@@ -31,7 +31,7 @@ for (const viewport of viewports) {
       await lastCard.click();
       await page.mouse.move(0, 0);
       await expect(page).toHaveURL(new RegExp(`/product/${lastProduct.id}$`));
-      await expect(page.getByRole('heading', { name: lastProduct.title, exact: true })).toHaveText(lastProduct.title);
+      await expect(page.getByRole('heading', { name: lastProduct.title, exact: true, level: 1 })).toHaveText(lastProduct.title);
     });
 
     test('opens the last blog from the complete trending grid', {
@@ -50,7 +50,7 @@ for (const viewport of viewports) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await lastCard.click();
       await expect(page).toHaveURL(new RegExp(`/blog/${lastBlog.id}$`));
-      await expect(page.getByRole('heading', { name: lastBlog.title, exact: true })).toHaveText(lastBlog.title);
+      await expect(page.getByRole('heading', { name: lastBlog.title, exact: true, level: 1 })).toHaveText(lastBlog.title);
     });
   });
 }

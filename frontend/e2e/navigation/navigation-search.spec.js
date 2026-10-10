@@ -31,7 +31,7 @@ for (const viewport of viewports) {
       await result.click();
       await page.mouse.move(0, 0);
       await expect(page).toHaveURL(new RegExp(`/product/${product.id}$`));
-      await expect(page.getByRole('heading', { name: product.title, exact: true })).toHaveText(product.title);
+      await expect(page.getByRole('heading', { name: product.title, exact: true, level: 1 })).toHaveText(product.title);
       await expect(page.getByTestId('search-overlay')).toBeHidden();
     });
 
