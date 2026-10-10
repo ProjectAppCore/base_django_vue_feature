@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -11,6 +13,9 @@ from base_feature_app.services.auth_service import (
 )
 from base_feature_app.utils.auth_utils import generate_auth_tokens
 from base_feature_app.views.captcha_views import verify_recaptcha
+
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
@@ -42,8 +47,16 @@ def sign_up(request):
         return Response(generate_auth_tokens(user), status=status.HTTP_201_CREATED)
     except ValueError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as exc:
+        logger.error(
+            'Unexpected authentication failure: operation=%s exception_type=%s',
+            'sign_up',
+            type(exc).__name__,
+        )
+        return Response(
+            {'error': 'An unexpected authentication error occurred.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(['POST'])
@@ -93,8 +106,16 @@ def google_login(request):
         return Response({'error': 'Account is disabled'}, status=status.HTTP_403_FORBIDDEN)
     except ValueError:
         return Response({'error': 'Google token validation failed'}, status=status.HTTP_401_UNAUTHORIZED)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as exc:
+        logger.error(
+            'Unexpected authentication failure: operation=%s exception_type=%s',
+            'google_login',
+            type(exc).__name__,
+        )
+        return Response(
+            {'error': 'An unexpected authentication error occurred.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     payload = generate_auth_tokens(user)
     payload['created'] = created
