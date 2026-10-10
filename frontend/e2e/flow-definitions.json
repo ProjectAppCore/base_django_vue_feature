@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "lastUpdated": "2026-08-13",
+  "lastUpdated": "2026-10-10",
   "flows": {
     "auth-login-email": {
       "name": "Login with email/password",
@@ -167,7 +167,7 @@
       "module": "navigation",
       "roles": ["shared"],
       "priority": "P2",
-      "description": "User opens and closes the shopping cart overlay from the header",
+      "description": "User opens the shopping cart from the header; the close button or backdrop immediately updates parent visibility without waiting for animation completion. Reopening preserves items, quantities, subtotal and cart storage, and allows another close.",
       "outcomes": ["success", "display"]
     },
     "theme-toggle": {
