@@ -1,18 +1,22 @@
+"""Tests for guest checkout sale persistence."""
+
 import pytest
 from django.urls import reverse
+from django_attachments.models import Library
 from rest_framework import status
 
 from base_feature_app.models import Blog, Product, Sale, SoldProduct
-from django_attachments.models import Library
 
 
 @pytest.fixture
 def library(db):
+    """Library."""
     return Library.objects.create(title='Test Library')
 
 
 @pytest.fixture
 def product(db, library):
+    """Product."""
     return Product.objects.create(
         title='Test Product',
         category='Test Category',
@@ -25,6 +29,7 @@ def product(db, library):
 
 @pytest.fixture
 def blog(db, library):
+    """Blog."""
     return Blog.objects.create(
         title='Test Blog',
         description='Test Description',
@@ -35,6 +40,7 @@ def blog(db, library):
 
 @pytest.mark.django_db
 def test_product_list_success(api_client, product):
+    """Test product list success."""
     url = reverse('list-products')
     response = api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -44,6 +50,7 @@ def test_product_list_success(api_client, product):
 
 @pytest.mark.django_db
 def test_blog_list_success(api_client, blog):
+    """Test blog list success."""
     url = reverse('list-blogs')
     response = api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -53,6 +60,7 @@ def test_blog_list_success(api_client, blog):
 
 @pytest.mark.django_db
 def test_create_sale_validation_error(api_client):
+    """Test create sale validation error."""
     url = reverse('create-sale')
     response = api_client.post(url, {}, format='json')
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -85,3 +93,21 @@ def test_create_sale_success(api_client, product):
     assert data['sold_products'][0]['quantity'] == 2
     assert Sale.objects.count() == 1
     assert SoldProduct.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_create_sale_rejects_an_unavailable_product(api_client, product):
+    """Test create sale rejects an unavailable product."""
+    missing_product_id = product.pk
+    product.delete()
+    payload = {
+        'email': 'buyer@example.com', 'address': '123 Main St',
+        'city': 'City', 'state': 'State', 'postal_code': '12345',
+        'sold_products': [{'product_id': missing_product_id, 'quantity': 2}],
+    }
+
+    response = api_client.post(reverse('create-sale'), payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'product_id' in response.json()['sold_products'][0]
+    assert (Sale.objects.count(), SoldProduct.objects.count()) == (0, 0)
