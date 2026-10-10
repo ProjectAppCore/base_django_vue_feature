@@ -9,9 +9,10 @@
                     <TabGroup as="div" class="flex flex-col-reverse">
 
                         <!-- Image Selector -->
-                        <div class="mx-auto mt-6 hidden w-full max-w-2xl sm:block lg:max-w-none">
+                        <div class="mx-auto mt-6 w-full max-w-2xl lg:max-w-none">
                             <TabList class="grid grid-cols-4 gap-6">
-                                <Tab v-for="image in product.gallery_urls" :key="image"
+                                <Tab v-for="(image, index) in product.gallery_urls" :key="image"
+                                    :aria-label="`View image ${index + 1}`"
                                     class="relative flex h-24 cursor-pointer items-center justify-center rounded-md bg-card text-sm font-medium uppercase hover:bg-muted transition-transform duration-300 transform hover:scale-110">
                                     <span class="absolute inset-0 overflow-hidden rounded-md">
                                         <img :src="image" alt="" class="h-full w-full object-cover object-center" />
