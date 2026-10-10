@@ -1,71 +1,56 @@
 import { test, expect } from '../helpers/test.js';
 import { HOME_CAROUSEL_NAVIGATE } from '../helpers/flow-tags.js';
 
-/**
- * E2E tests for the home page carousel navigation.
- *
- * Each test asserts the carousel actually moves — the transform of the track
- * changes after clicking next, and returns after clicking prev. Earlier versions
- * captured the transform before and after but only asserted it was truthy, so a
- * frozen carousel would have passed.
- */
+// Keep the existing flow/component names; trending content now uses static grids.
+const viewports = [
+  { width: 835, height: 1194, columns: 2 },
+  { width: 412, height: 915, columns: 1 },
+  { width: 1195, height: 835, columns: 5 },
+  { width: 1440, height: 900, columns: 5 },
+  { width: 2560, height: 1440, columns: 5 },
+];
 
-/** Wait until the track's transform differs from `from` (accounts for the slide animation). */
-async function expectTransformChanged(carousel, from) {
-  await expect(async () => {
-    const t = await carousel.evaluate((el) => getComputedStyle(el).transform);
-    expect(t).not.toEqual(from);
-  }).toPass({ timeout: 5000 });
+for (const viewport of viewports) {
+  test.describe(`Home — trending grids @ ${viewport.width}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    test('opens the last product from the complete trending grid', {
+      tag: [...HOME_CAROUSEL_NAVIGATE, '@role:shared', '@outcome:success'],
+    }, async ({ page }) => {
+      const response = page.waitForResponse((r) => r.url().endsWith('/api/products/') && r.request().method() === 'GET');
+      await page.goto('/');
+      const products = await (await response).json();
+      expect(products.length).toBeGreaterThan(5);
+      const grid = page.getByTestId('product-carousel-list');
+      await expect(grid.getByTestId('product-carousel-item')).toHaveCount(products.length);
+      expect(await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(viewport.columns);
+      const lastProduct = products.at(-1);
+      const lastCard = grid.getByTestId('product-carousel-item').last();
+      await lastCard.scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await lastCard.click();
+      await page.mouse.move(0, 0);
+      await expect(page).toHaveURL(new RegExp(`/product/${lastProduct.id}$`));
+      await expect(page.getByRole('heading', { name: lastProduct.title, exact: true, level: 1 })).toHaveText(lastProduct.title);
+    });
+
+    test('opens the last blog from the complete trending grid', {
+      tag: [...HOME_CAROUSEL_NAVIGATE, '@role:shared', '@outcome:success'],
+    }, async ({ page }) => {
+      const response = page.waitForResponse((r) => r.url().endsWith('/api/blogs/') && r.request().method() === 'GET');
+      await page.goto('/');
+      const blogs = await (await response).json();
+      expect(blogs.length).toBeGreaterThan(5);
+      const grid = page.getByTestId('blog-carousel-list');
+      await expect(grid.getByTestId('blog-carousel-item')).toHaveCount(blogs.length);
+      expect(await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(viewport.columns);
+      const lastBlog = blogs.at(-1);
+      const lastCard = grid.getByTestId('blog-carousel-item').last();
+      await lastCard.scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await lastCard.click();
+      await expect(page).toHaveURL(new RegExp(`/blog/${lastBlog.id}$`));
+      await expect(page.getByRole('heading', { name: lastBlog.title, exact: true, level: 1 })).toHaveText(lastBlog.title);
+    });
+  });
 }
-
-test.describe('Home — carousels', () => {
-  test('the product carousel advances when next is clicked', {
-    tag: [...HOME_CAROUSEL_NAVIGATE, '@role:shared', '@outcome:success'],
-  }, async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    const carousel = page.locator('[data-testid="product-carousel-list"]');
-    const nextButton = page.locator('[data-testid="product-carousel-next"]');
-    await expect(nextButton).toBeVisible();
-
-    const before = await carousel.evaluate((el) => getComputedStyle(el).transform);
-    await nextButton.click();
-    await expectTransformChanged(carousel, before);
-  });
-
-  test('the product carousel returns to the start when prev is clicked', {
-    tag: [...HOME_CAROUSEL_NAVIGATE, '@role:shared', '@outcome:success'],
-  }, async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    const carousel = page.locator('[data-testid="product-carousel-list"]');
-    const nextButton = page.locator('[data-testid="product-carousel-next"]');
-    const prevButton = page.locator('[data-testid="product-carousel-prev"]');
-    await expect(nextButton).toBeVisible();
-
-    const start = await carousel.evaluate((el) => getComputedStyle(el).transform);
-    await nextButton.click();
-    await expectTransformChanged(carousel, start);
-
-    const advanced = await carousel.evaluate((el) => getComputedStyle(el).transform);
-    await prevButton.click();
-    await expectTransformChanged(carousel, advanced);
-  });
-
-  test('the blog carousel advances when next is clicked', {
-    tag: [...HOME_CAROUSEL_NAVIGATE, '@role:shared', '@outcome:success'],
-  }, async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    const carousel = page.locator('[data-testid="blog-carousel-list"]');
-    const nextButton = page.locator('[data-testid="blog-carousel-next"]');
-    await expect(nextButton).toBeVisible();
-
-    const before = await carousel.evaluate((el) => getComputedStyle(el).transform);
-    await nextButton.click();
-    await expectTransformChanged(carousel, before);
-  });
-});

@@ -1,7 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
-import { nextTick } from 'vue';
 
 jest.mock('@/services/http/client', () => ({
   get: jest.fn(),
@@ -15,7 +14,7 @@ jest.mock('@/services/http/tokens', () => ({
   clearTokens: jest.fn(),
 }));
 
-import { useProductStore } from '@/stores/product';
+import httpClient from '@/services/http/client';
 import { useLanguageStore } from '@/stores/language';
 import ProductCarousel from '@/components/product/ProductCarousel.vue';
 
@@ -37,132 +36,76 @@ function buildRouter() {
   });
 }
 
-describe('ProductCarousel Component', () => {
-  let productStore;
+describe('ProductCarousel responsive grid', () => {
   let router;
 
   beforeEach(() => {
     setActivePinia(createPinia());
-    jest.useFakeTimers();
     jest.clearAllMocks();
     router = buildRouter();
-    productStore = useProductStore();
-    jest.spyOn(productStore, 'fetchProducts').mockResolvedValue();
-    productStore.products = [...sampleProducts];
+    httpClient.get.mockResolvedValue({ data: sampleProducts });
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  test('renders carousel items when products are present', async () => {
+  async function renderGrid() {
+    await router.push('/');
+    await router.isReady();
     const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
     await flushPromises();
+    return wrapper;
+  }
 
-    expect(wrapper.findAll('[data-testid="product-carousel-item"]').length).toBe(sampleProducts.length);
+  test('shows received products in their original order', async () => {
+    const wrapper = await renderGrid();
+
+    const titles = wrapper.findAll('[data-testid="product-carousel-item"] h3').map((item) => item.text());
+    expect(titles).toEqual(sampleProducts.map((item) => item.title));
   });
 
-  test('renders nothing when products list is empty', async () => {
-    productStore.products = [];
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
+  test('shows the received price for each product', async () => {
+    const wrapper = await renderGrid();
+
+    const values = wrapper.findAll('[data-testid="product-carousel-item"] p').map((item) => item.text());
+    expect(values).toEqual(sampleProducts.map((item) => `$${item.price}`));
+  });
+
+  test('shows the received image for each product', async () => {
+    const wrapper = await renderGrid();
+
+    const images = wrapper.findAll('[data-testid="product-carousel-item"] img').map((item) => item.attributes('src'));
+    expect(images).toEqual(sampleProducts.map((item) => item.gallery_urls[0]));
+  });
+
+  test('renders no grid when the response is empty', async () => {
+    httpClient.get.mockResolvedValue({ data: [] });
+    const wrapper = await renderGrid();
 
     expect(wrapper.find('[data-testid="product-carousel-list"]').exists()).toBe(false);
   });
 
-  test('next button increments currentIndex when not at last page', async () => {
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
+  test('opens the last product through its card', async () => {
+    const wrapper = await renderGrid();
+
+    await wrapper.findAll('[data-testid="product-carousel-item"]').at(-1).trigger('click');
     await flushPromises();
 
-    const list = wrapper.find('[data-testid="product-carousel-list"]');
-    const styleBefore = list.attributes('style');
-
-    await wrapper.find('[data-testid="product-carousel-next"]').trigger('click');
-
-    // Fails if next() advances to the wrong index (off-by-one) or if the
-    // translateX formula uses a divisor other than 5.
-    expect(list.attributes('style')).toContain('translateX(-20%');
+    expect(router.currentRoute.value.path).toBe('/product/6');
   });
 
-  test('next button wraps currentIndex to 0 when at last page', async () => {
-    productStore.products = sampleProducts.slice(0, 5);
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
+  test('opens the catalog through its existing link', async () => {
+    const wrapper = await renderGrid();
+    const link = wrapper.findAll('a').find((item) => item.text() === 'SHOP NOW');
+
+    await link.trigger('click');
     await flushPromises();
 
-    await wrapper.find('[data-testid="product-carousel-next"]').trigger('click');
-
-    const list = wrapper.find('[data-testid="product-carousel-list"]');
-    expect(list.attributes('style')).toContain('translateX(-0%');
+    expect(router.currentRoute.value.path).toBe('/catalog');
   });
 
-  test('prev button decrements currentIndex when not at first page', async () => {
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
+  test('preserves the non-English title behavior', async () => {
+    useLanguageStore().setCurrentLanguage('es');
+    const wrapper = await renderGrid();
 
-    await wrapper.find('[data-testid="product-carousel-next"]').trigger('click');
-    const styleAfterNext = wrapper.find('[data-testid="product-carousel-list"]').attributes('style');
-
-    await wrapper.find('[data-testid="product-carousel-prev"]').trigger('click');
-
-    // Fails if prev() does not land back on exactly index 0 after next()+prev().
-    expect(wrapper.find('[data-testid="product-carousel-list"]').attributes('style')).toContain('translateX(-0%');
-  });
-
-  test('prev button wraps to last page when at index 0', async () => {
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    await wrapper.find('[data-testid="product-carousel-prev"]').trigger('click');
-
-    const list = wrapper.find('[data-testid="product-carousel-list"]');
-    // Fails if the wrap from index 0 lands on any page other than the last
-    // one (Math.ceil(6/5)-1=1), not just "something other than 0".
-    expect(list.attributes('style')).toContain('translateX(-20%');
-  });
-
-  test('stopCarousel clears interval on unmount', async () => {
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const clearSpy = jest.spyOn(global, 'clearInterval');
-    wrapper.unmount();
-
-    expect(clearSpy).toHaveBeenCalled();
-  });
-
-  test('stopCarousel does not call clearInterval when interval was never started', async () => {
-    productStore.products = [];
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const clearSpy = jest.spyOn(global, 'clearInterval');
-    wrapper.unmount();
-
-    expect(clearSpy).not.toHaveBeenCalled();
-  });
-
-  test('auto-advance moves to next slide after 3 seconds', async () => {
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    const styleBefore = wrapper.find('[data-testid="product-carousel-list"]').attributes('style');
-    jest.advanceTimersByTime(3000);
-    await nextTick();
-
-    // Fails if the setInterval callback advances to the wrong index (or not
-    // at all) on the first 3s tick.
-    expect(wrapper.find('[data-testid="product-carousel-list"]').attributes('style')).toContain('translateX(-20%');
-  });
-
-  test('does not render product title span when language is not en', async () => {
-    const languageStore = useLanguageStore();
-    languageStore.setCurrentLanguage('es');
-
-    const wrapper = mount(ProductCarousel, { global: { plugins: [router] } });
-    await flushPromises();
-
-    expect(wrapper.findAll('[data-testid="product-carousel-item"]').length).toBe(sampleProducts.length);
-    const titleSpans = wrapper.findAll('[data-testid="product-carousel-item"] h3 span');
-    expect(titleSpans.length).toBe(0);
+    expect(wrapper.findAll('[data-testid="product-carousel-item"] h3 span')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="product-carousel-item"] p').text()).toBe('$10');
   });
 });

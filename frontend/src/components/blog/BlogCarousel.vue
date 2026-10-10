@@ -1,6 +1,6 @@
 <template>
-    <!-- Carousel container for trending blogs -->
-    <div v-if="blogsOnTrending && blogsOnTrending.length" class="carousel-container p-16">
+    <!-- Responsive grid of trending blogs. Component name is kept for existing imports. -->
+    <div v-if="blogsOnTrending && blogsOnTrending.length" class="carousel-container w-full p-16">
         <div class="text-center mb-8">
             <h2 class="text-3xl font-semibold">TRENDING NOW</h2>
             <p class="text-xl font-medium text-muted-foreground">
@@ -10,58 +10,36 @@
                 </RouterLink>
             </p>
         </div>
-        <div class="relative">
-            <!-- Previous button for carousel -->
-            <button
-                class="absolute left-0 top-1/2 transform -translate-y-1/2 bg-primary text-primary-foreground rounded-full shadow size-6 flex items-center justify-center z-10"
-                @click="prev" data-testid="blog-carousel-prev">
-                <span class="sr-only">Previous</span>
-                <span class="block text-sm leading-none">&lsaquo;</span>
-            </button>
-            <!-- Carousel items container -->
-            <div class="overflow-hidden">
-                <ul class="flex transition-transform duration-500 ease-in-out" data-testid="blog-carousel-list"
-                    :style="{ transform: `translateX(-${(currentIndex * 100) / 5}%)` }">
-                    <!-- Loop through trending blogs and display them in the carousel -->
-                    <router-link :to="{ name: 'blog', params: { blog_id: blog.id } }"
-                        v-for="blog in blogsOnTrending" :key="blog.id"
-                        class="flex-none w-full sm:w-1/2 lg:w-1/5 px-2 cursor-pointer" data-testid="blog-carousel-item">
-                        <div class="shadow">
-                            <img :src="blog.image_url" :alt="blog.title"
-                                class="w-full object-cover mb-4" />
-                            <div class="text-center">
-                                <h3 class="text-lg font-semibold">
-                                    <!-- Display blog name based on current language -->
-                                    <span v-if="currentLanguage === 'en'">{{ blog.title }}</span>
-                                </h3>
-                                <p class="text-lg font-semibold">
-                                    {{ blog.category }}
-                                </p>
-                            </div>
+        <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5" data-testid="blog-carousel-list">
+            <li v-for="blog in blogsOnTrending" :key="blog.id" class="min-w-0">
+                <router-link :to="{ name: 'blog', params: { blog_id: blog.id } }"
+                    class="block px-2 cursor-pointer" data-testid="blog-carousel-item">
+                    <div class="shadow">
+                        <img :src="blog.image_url" :alt="blog.title"
+                            class="w-full object-cover mb-4" />
+                        <div class="text-center">
+                            <h3 class="text-lg font-semibold">
+                                <!-- Display blog name based on current language -->
+                                <span v-if="currentLanguage === 'en'">{{ blog.title }}</span>
+                            </h3>
+                            <p class="text-lg font-semibold">
+                                {{ blog.category }}
+                            </p>
                         </div>
-                    </router-link>
-                </ul>
-            </div>
-            <!-- Next button for carousel -->
-            <button
-                class="absolute right-0 top-1/2 transform -translate-y-1/2 bg-primary text-primary-foreground rounded-full shadow size-6 flex items-center justify-center z-10"
-                @click="next" data-testid="blog-carousel-next">
-                <span class="sr-only">Next</span>
-                <span class="block text-sm leading-none">&rsaquo;</span>
-            </button>
-        </div>
+                    </div>
+                </router-link>
+            </li>
+        </ul>
     </div>
 </template>
 
 <script setup>
     // Importing necessary modules
-    import { computed, ref, onMounted, onUnmounted } from "vue";
+    import { computed, ref, onMounted } from "vue";
     import { useLanguageStore } from '@/stores/language.js';
     import { useBlogStore } from "@/stores/blog";
 
     // Initializing state
-    const currentIndex = ref(0);
-    const interval = ref(null);
     const blogsOnTrending = ref(null);
 
     // Access the current language from the store
@@ -75,55 +53,6 @@
     onMounted(async () => {
         await blogStore.fetchBlogs();
         blogsOnTrending.value = blogStore.blogs;
-        if (blogsOnTrending.value.length) {
-            startCarousel();
-        }
     });
 
-    // Stop the carousel when the component is unmounted
-    onUnmounted(() => {
-        stopCarousel();
-    });
-
-    /**
-     * Move to the next set of blogs in the carousel
-     */
-    const next = () => {
-        if (!blogsOnTrending.value?.length) return;
-        if (currentIndex.value < Math.ceil(blogsOnTrending.value.length / 5) - 1) {
-            currentIndex.value++;
-        } else {
-            currentIndex.value = 0;
-        }
-    };
-
-    /**
-     * Move to the previous set of blogs in the carousel
-     */
-    const prev = () => {
-        if (!blogsOnTrending.value?.length) return;
-        if (currentIndex.value > 0) {
-            currentIndex.value--;
-        } else {
-            currentIndex.value = Math.ceil(blogsOnTrending.value.length / 5) - 1;
-        }
-    };
-
-    /**
-     * Start the automatic carousel rotation
-     */
-    const startCarousel = () => {
-        interval.value = setInterval(() => {
-            next();
-        }, 3000);
-    };
-
-    /**
-     * Stop the automatic carousel rotation
-     */
-    const stopCarousel = () => {
-        if (interval.value) {
-            clearInterval(interval.value);
-        }
-    };
 </script>
