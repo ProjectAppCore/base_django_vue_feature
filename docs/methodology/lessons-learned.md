@@ -31,8 +31,8 @@ This file captures important patterns, preferences, and project intelligence tha
 ### Backend: Function-Based Views (FBV)
 - **All** DRF views use `@api_view` decorators, not class-based views. Never convert to CBV unless explicitly requested.
 
-### Frontend: Pinia Options API
-- **All** Pinia stores use Options API pattern: `{ state, getters, actions }` — never `setup()` style stores.
+### Frontend: Pinia Stores
+- Both Options API (`frontend/src/stores/auth.js`) and setup stores (`frontend/src/stores/product.js`) exist. Preserve the style of the store being extended; neither requires a conversion.
 - HTTP requests go through the centralized service under `frontend/src/stores/services/`.
 - i18n is frontend-side (`stores/i18n.js`, `language.js`) — models have **no** bilingual paired fields in this template.
 

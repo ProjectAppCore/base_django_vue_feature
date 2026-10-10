@@ -251,10 +251,10 @@ por ecosistema. La fuente de verdad es `vps-ops-toolkit/workflows/`.
 
 - **Name**: Base Django Vue Feature (Template project)
 - **Domain**: N/A (template — not deployed to production)
-- **Stack**: Django + DRF (backend) / Nuxt 3 + Vue 3 (frontend) / MySQL 8 / Redis / Huey
+- **Stack**: Django + DRF (backend) / Vue 3 + Vite + Pinia + vue-router (frontend) / SQLite (dev/tests) / MySQL 8 (prod) / Redis / Huey
 - **Server path**: `/home/ryzepeck/webapps/base_django_vue_feature_staging` (staging only)
 - **Services**: `base_django_vue_feature_staging` (Gunicorn), `base_django_vue_feature-staging-huey`
-- **Note**: This is a **template project** used as the starting point for new Django+Nuxt projects
+- **Note**: This is a **template project** used as the starting point for new Django+Vue projects
 
 ---
 
@@ -568,8 +568,9 @@ Focus particularly on `tasks/active_context.md` and `tasks/tasks_plan.md` as the
 
 ## Directory Structure
 
-- Backend: `content/` Django app, `base_feature_project/` Django project
-- Frontend: `pages/`, `components/`, `stores/`, `composables/`, `e2e/`, `test/`
+- Backend: `backend/base_feature_app/` Django app, `backend/base_feature_project/` Django project
+- Frontend: `frontend/src/` contains `views/`, `components/`, `stores/`, and `composables/`; tests are in `frontend/test/` and `frontend/e2e/`
+- Add frontend routes explicitly in `frontend/src/router/index.js`.
 
 ---
 
@@ -580,7 +581,7 @@ Focus particularly on `tasks/active_context.md` and `tasks/tasks_plan.md` as the
 - **Never run the full test suite** — always specify files
 - **Maximum per execution**: 20 tests per batch, 3 commands per cycle
 - **Backend**: Always activate venv first: `source venv/bin/activate && pytest path/to/test_file.py -v`
-- **Frontend unit**: `npm test -- path/to/file.spec.ts`
+- **Frontend unit** (from `frontend/`): `npm test -- test/components/ShoppingCart.test.js --runInBand`
 - **E2E**: max 2 files per `npx playwright test` invocation
 - Use `E2E_REUSE_SERVER=1` when dev server is already running
 
@@ -601,46 +602,31 @@ Full reference: `docs/TESTING_QUALITY_STANDARDS.md`
 
 ### Architecture Patterns
 
-#### Content Storage: Structured JSON over CMS
-- Structured JSON storage for content (JSONField pattern)
-- Each proposal section's `content_json` maps directly to a Vue component's props schema
-
-#### Single Django App: `content`
-- All models, views, serializers, and services live in the `content` app
-- Models are split into individual files under `content/models/`
+#### Domain App: `base_feature_app`
+- Domain models, views, serializers, and services live in `backend/base_feature_app/`.
+- Models, views, serializers, and URLs are packages with one module per domain.
+- `backend/django_attachments/` supplies the gallery attachment app.
 
 #### Service Layer Pattern
-- Business logic lives in `content/services/`, not in views
-- Views are thin FBV wrappers that call service methods
+- Authentication logic lives in `backend/base_feature_app/services/auth_service.py`.
+- DRF views use `@api_view` function-based views.
 
 ### Code Style & Conventions
 
-#### Bilingual Content Pattern
-- Models have paired fields: `title_en`/`title_es`, `content_json_en`/`content_json_es`, etc.
-- Frontend reads the appropriate field based on current locale
+#### Pinia Stores
+- Both Options API (`frontend/src/stores/auth.js`) and setup stores (`frontend/src/stores/product.js`) exist.
+- Preserve the style of the store being extended; neither requires a conversion.
 
-### Email System
-
-#### Template Registry Pattern
-- All emails defined in `EmailTemplateRegistry` with default content
-- Admin can override content via `EmailTemplateConfig` model
-
-#### 24h Cooldown Rule
-- `last_automated_email_at` field tracks last automated email
-- All automated email tasks check this before sending
-- Manual sends bypass the cooldown
-
-### Proposal System
-
-- 12 section types defined in `ProposalSection.SectionType` choices with unique constraint
-- Heat Score (1-10): pre-computed and cached
+#### Frontend Translations
+- Vue i18n messages live in `frontend/src/i18n/index.js`; the locale store is `frontend/src/stores/i18n.js`.
+- Domain models do not have paired English/Spanish content fields.
 
 ### Development Workflow
 
 #### Build Flow
-- `npm run build:django` → generates `backend/static/frontend/`
-- `python manage.py collectstatic` → copies to `backend/staticfiles/`
-- Django serves pre-rendered Nuxt pages via catch-all `serve_nuxt` view
+- From `frontend/`, `npm run build` runs Vite and generates `frontend/dist/`.
+- Django `collectstatic` gathers backend static assets into `backend/staticfiles/`; it does not build or serve the SPA.
+- Frontend hosting must serve the Vite build and resolve client routes to its `index.html`; Django URLs serve the API and admin.
 
 ---
 

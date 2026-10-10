@@ -43,7 +43,7 @@ cd frontend && npm install   # Jest unit, Playwright e2e (chromium cached in ~/.
 - **Per-domain packages**: `models/`, `views/`, `urls/`, `serializers/` are packages with one module per domain (auth, blog, product, sale, staging_phase_banner, user, captcha).
 - **FBV only**: DRF views use `@api_view` decorators. Never convert to CBV unprompted.
 - **Service layer**: business logic in `services/` (currently `auth_service.py`); views stay thin.
-- **Pinia Options API**: stores use `{state, getters, actions}`; HTTP goes through the centralized service under `frontend/src/stores/services/`.
+- **Pinia stores**: both Options API (`frontend/src/stores/auth.js`) and setup stores (`frontend/src/stores/product.js`) exist; preserve the style of the store being extended. HTTP goes through the centralized service under `frontend/src/stores/services/`.
 - **Custom admin**: `admin_site` (mounted at `/admin/`) plus default admin at `/admin-gallery/`.
 
 ## 5. Testing strategy
