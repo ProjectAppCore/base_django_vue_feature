@@ -1,9 +1,11 @@
 """Authentication behavior at the API boundary."""
 
+import logging
 from unittest.mock import Mock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import connection, transaction
 from django.urls import reverse
 from rest_framework import status
 
@@ -69,24 +71,116 @@ def test_sign_up_success(mock_captcha, api_client):
     assert 'refresh' in data
 
 
+@pytest.fixture
+def rejected_auth_insert(db):
+    """Reject only the scratch identity through SQLite's real persistence boundary."""
+    table = connection.ops.quote_name(get_user_model()._meta.db_table)
+    with connection.cursor() as cursor:
+        cursor.execute(f"""
+            CREATE TEMP TRIGGER reject_auth_user_insert
+            BEFORE INSERT ON {table}
+            WHEN NEW.email = 'blocked-auth@example.invalid'
+            BEGIN
+                SELECT RAISE(ABORT, 'private-persistence-detail');
+            END;
+        """)
+    try:
+        yield 'blocked-auth@example.invalid'
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TRIGGER reject_auth_user_insert')
+
+
 @pytest.mark.django_db
-@patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
-def test_sign_up_returns_exception_message(mock_captcha, api_client, monkeypatch):
-    """Verifies that sign_up returns HTTP 400 when user creation raises an unexpected exception."""
-    from base_feature_app.models import User
+@patch('base_feature_app.views.captcha_views.requests.post')
+def test_sign_up_returns_safe_server_error_on_persistence_failure(
+    mock_captcha_http, api_client, admin_user, rejected_auth_insert, settings, caplog,
+):
+    """A real rejected insert produces a sanitized server error without changing accounts."""
+    User = get_user_model()
+    before = list(User.objects.values())
+    # quality: disable global_state_mutation (pytest-django restores settings)
+    settings.RECAPTCHA_SECRET_KEY = 'synthetic-private-captcha-secret'
+    mock_captcha_http.return_value.json.return_value = {'success': True}
+    caplog.set_level(logging.ERROR, logger='base_feature_app.views.auth')
 
-    def boom(*args, **kwargs):
-        raise Exception('boom')
+    # The trigger predates this savepoint; the caught IntegrityError rolls it back on exit.
+    with transaction.atomic():
+        response = api_client.post(reverse('sign_up'), {
+            'email': rejected_auth_insert,
+            'password': 'synthetic-private-password',
+            'captcha_token': 'synthetic-private-captcha-token',
+        }, format='json')
 
-    monkeypatch.setattr(User.objects, 'create_user', boom)
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json() == {'error': 'An unexpected authentication error occurred.'}
+    assert list(User.objects.values()) == before
+    records = [record for record in caplog.records if record.name == 'base_feature_app.views.auth']
+    assert len(records) == 1
+    record = records[0]
+    assert {
+        'level': record.levelno, 'template': record.msg,
+        'args': record.args, 'message': record.getMessage(),
+        'exc_info': record.exc_info, 'stack_info': record.stack_info,
+    } == {
+        'level': logging.ERROR,
+        'template': 'Unexpected authentication failure: operation=%s exception_type=%s',
+        'args': ('sign_up', 'IntegrityError'),
+        'message': 'Unexpected authentication failure: operation=sign_up exception_type=IntegrityError',
+        'exc_info': None, 'stack_info': None,
+    }
+    safe_output = response.content.decode() + caplog.text
+    private_markers = [
+        rejected_auth_insert, admin_user.email, 'private-persistence-detail',
+        'synthetic-private-password', 'synthetic-private-captcha-token',
+        'synthetic-private-captcha-secret',
+    ]
+    assert [marker for marker in private_markers if marker in safe_output] == []
 
-    url = reverse('sign_up')
-    response = api_client.post(
-        url,
-        {'email': 'err@example.com', 'password': 'pass12345'},
-        format='json',
-    )
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+@pytest.mark.django_db
+def test_google_login_returns_safe_server_error_on_persistence_failure(
+    api_client, admin_user, rejected_auth_insert, google_verifier, caplog,
+):
+    """A real Google account insert failure exposes only the safe server error."""
+    User = get_user_model()
+    before = list(User.objects.values())
+    google_verifier.return_value = {
+        'email': rejected_auth_insert,
+        'email_verified': True,
+        'given_name': 'Synthetic',
+        'family_name': 'Private',
+    }
+    caplog.set_level(logging.ERROR, logger='base_feature_app.views.auth')
+
+    with transaction.atomic():
+        response = api_client.post(reverse('google_login'), {
+            'credential': 'synthetic-private-google-credential',
+        }, format='json')
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json() == {'error': 'An unexpected authentication error occurred.'}
+    assert list(User.objects.values()) == before
+    records = [record for record in caplog.records if record.name == 'base_feature_app.views.auth']
+    assert len(records) == 1
+    record = records[0]
+    assert {
+        'level': record.levelno, 'template': record.msg,
+        'args': record.args, 'message': record.getMessage(),
+        'exc_info': record.exc_info, 'stack_info': record.stack_info,
+    } == {
+        'level': logging.ERROR,
+        'template': 'Unexpected authentication failure: operation=%s exception_type=%s',
+        'args': ('google_login', 'IntegrityError'),
+        'message': 'Unexpected authentication failure: operation=google_login exception_type=IntegrityError',
+        'exc_info': None, 'stack_info': None,
+    }
+    safe_output = response.content.decode() + caplog.text
+    private_markers = [
+        rejected_auth_insert, admin_user.email, 'private-persistence-detail',
+        'synthetic-private-google-credential', 'Synthetic', 'Private',
+    ]
+    assert [marker for marker in private_markers if marker in safe_output] == []
 
 
 @pytest.mark.django_db
