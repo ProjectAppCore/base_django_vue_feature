@@ -1,4 +1,6 @@
-from unittest.mock import patch
+"""Authentication behavior at the API boundary."""
+
+from unittest.mock import Mock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -9,6 +11,7 @@ from rest_framework import status
 @pytest.mark.django_db
 @patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
 def test_sign_up_requires_email_and_password(mock_captcha, api_client):
+    """Verify sign up requires email and password."""
     url = reverse('sign_up')
     response = api_client.post(url, {}, format='json')
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -17,6 +20,7 @@ def test_sign_up_requires_email_and_password(mock_captcha, api_client):
 @pytest.mark.django_db
 @patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
 def test_sign_up_rejects_short_password(mock_captcha, api_client):
+    """Verify sign up rejects short password."""
     url = reverse('sign_up')
     response = api_client.post(
         url,
@@ -29,6 +33,7 @@ def test_sign_up_rejects_short_password(mock_captcha, api_client):
 @pytest.mark.django_db
 @patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
 def test_sign_up_rejects_existing_email(mock_captcha, api_client):
+    """Verify sign up rejects existing email."""
     User = get_user_model()
     User.objects.create_user(email='exists@example.com', password='pass12345')
 
@@ -87,6 +92,7 @@ def test_sign_up_returns_exception_message(mock_captcha, api_client, monkeypatch
 @pytest.mark.django_db
 @patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
 def test_sign_in_requires_email_and_password(mock_captcha, api_client):
+    """Verify sign in requires email and password."""
     url = reverse('sign_in')
     response = api_client.post(url, {}, format='json')
     assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -95,6 +101,7 @@ def test_sign_in_requires_email_and_password(mock_captcha, api_client):
 @pytest.mark.django_db
 @patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
 def test_sign_in_invalid_credentials(mock_captcha, api_client):
+    """Verify sign in invalid credentials."""
     url = reverse('sign_in')
     response = api_client.post(
         url,
@@ -107,6 +114,7 @@ def test_sign_in_invalid_credentials(mock_captcha, api_client):
 @pytest.mark.django_db
 @patch('base_feature_app.views.auth.verify_recaptcha', return_value=True)
 def test_sign_in_disabled_account(mock_captcha, api_client):
+    """Verify sign in disabled account."""
     User = get_user_model()
     user = User.objects.create_user(email='disabled@example.com', password='pass12345')
     user.is_active = False
@@ -143,6 +151,7 @@ def test_sign_in_success(mock_captcha, api_client):
 
 @pytest.mark.django_db
 def test_validate_token_unauthenticated(api_client):
+    """Verify validate token unauthenticated."""
     url = reverse('validate_token')
     response = api_client.get(url)
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -150,6 +159,7 @@ def test_validate_token_unauthenticated(api_client):
 
 @pytest.mark.django_db
 def test_validate_token_authenticated(api_client):
+    """Verify validate token authenticated."""
     User = get_user_model()
     user = User.objects.create_user(email='val@example.com', password='pass12345')
 
@@ -164,144 +174,10 @@ def test_validate_token_authenticated(api_client):
 
 
 @pytest.mark.django_db
-def test_google_login_requires_email_when_no_credential(api_client):
-    url = reverse('google_login')
-    response = api_client.post(url, {}, format='json')
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-
-@pytest.mark.django_db
-def test_google_login_creates_user_without_credential(api_client):
-    url = reverse('google_login')
-    response = api_client.post(
-        url,
-        {'email': 'google@example.com', 'given_name': 'G', 'family_name': 'User'},
-        format='json',
-    )
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data['user']['email'] == 'google@example.com'
-    assert data['created'] is True
-
-
-@pytest.mark.django_db
-def test_google_login_updates_existing_user_names(api_client):
-    """Verifies that google_login updates first_name and last_name for an existing user with empty names."""
-    User = get_user_model()
-    user = User.objects.create_user(email='update@example.com', password='pass12345', first_name='', last_name='')
-
-    url = reverse('google_login')
-    response = api_client.post(
-        url,
-        {'email': 'update@example.com', 'given_name': 'Given', 'family_name': 'Family'},
-        format='json',
-    )
-    assert response.status_code == status.HTTP_200_OK
-
-    user.refresh_from_db()
-    assert user.first_name == 'Given'
-    assert user.last_name == 'Family'
-
-
-@pytest.mark.django_db
-def test_google_login_with_credential_and_client_id(api_client, settings, monkeypatch):
-    """Verifies that google_login authenticates a user when a valid credential is verified against the configured client ID."""
-    # quality: disable global_state_mutation (pytest-django settings fixture auto-reverts after test)
-    settings.GOOGLE_OAUTH_CLIENT_ID = 'client-id'
-
-    def fake_verify(credential, request, audience):
-        assert audience == 'client-id'
-        return {
-            'email': 'payload@example.com',
-            'given_name': 'Payload',
-            'family_name': 'User',
-            'picture': 'http://example.com/p.png',
-        }
-
-    monkeypatch.setattr('base_feature_app.services.auth_service.id_token.verify_oauth2_token', fake_verify)
-
-    url = reverse('google_login')
-    response = api_client.post(
-        url,
-        {'credential': 'x'},
-        format='json',
-    )
-
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data['user']['email'] == 'payload@example.com'
-
-
-@pytest.mark.django_db
-def test_google_login_credential_tokeninfo_invalid(api_client, settings, monkeypatch):
-    """Verifies that google_login returns HTTP 401 when the tokeninfo endpoint returns a non-200 status."""
-    # quality: disable global_state_mutation (pytest-django settings fixture auto-reverts after test)
-    settings.GOOGLE_OAUTH_CLIENT_ID = ''
-
-    class FakeResp:
-        status_code = 400
-
-        def json(self):
-            return {}
-
-    monkeypatch.setattr('base_feature_app.services.auth_service.http_requests.get', lambda *args, **kwargs: FakeResp())
-
-    url = reverse('google_login')
-    response = api_client.post(url, {'credential': 'x'}, format='json')
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-
-@pytest.mark.django_db
-def test_google_login_create_user_exception(api_client, monkeypatch):
-    """Verifies that google_login returns HTTP 400 when user lookup raises an unexpected exception."""
-    from base_feature_app.models import User
-
-    def boom(*args, **kwargs):
-        raise Exception('boom')
-
-    monkeypatch.setattr(User.objects, 'filter', boom)
-
-    url = reverse('google_login')
-    response = api_client.post(
-        url,
-        {'email': 'fail@example.com', 'given_name': 'X', 'family_name': 'Y'},
-        format='json',
-    )
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-
-
-@pytest.mark.django_db
-def test_google_login_credential_tokeninfo_success(api_client, settings, monkeypatch):
-    """Verifies that google_login creates a user when the tokeninfo endpoint returns valid user info."""
-    # quality: disable global_state_mutation (pytest-django settings fixture auto-reverts after test)
-    settings.GOOGLE_OAUTH_CLIENT_ID = ''
-
-    class FakeResp:
-        status_code = 200
-
-        def json(self):
-            return {
-                'email': 'tokeninfo@example.com',
-                'given_name': 'Token',
-                'family_name': 'Info',
-                'picture': 'http://example.com/p.png',
-            }
-
-    monkeypatch.setattr('base_feature_app.services.auth_service.http_requests.get', lambda *args, **kwargs: FakeResp())
-
-    url = reverse('google_login')
-    response = api_client.post(url, {'credential': 'x'}, format='json')
-
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data['user']['email'] == 'tokeninfo@example.com'
-    assert data['created'] is True
-
-
-@pytest.mark.django_db
 def test_validate_token_returns_valid_false_for_anonymous_user(api_client, monkeypatch):
+    """Verify validate token returns valid false for anonymous user."""
     from rest_framework.permissions import AllowAny
+
     from base_feature_app.views.auth import validate_token
 
     monkeypatch.setattr(validate_token.cls, 'permission_classes', [AllowAny])
@@ -313,16 +189,156 @@ def test_validate_token_returns_valid_false_for_anonymous_user(api_client, monke
     assert response.json() == {'valid': False}
 
 
-@pytest.mark.django_db
-def test_google_login_credential_verification_exception(api_client, settings, monkeypatch):
-    # quality: disable global_state_mutation (pytest-django settings fixture auto-reverts after test)
+@pytest.fixture
+def google_verifier(settings, monkeypatch):
+    """Replace the external Google verifier with verified identity claims."""
+    # quality: disable global_state_mutation (pytest-django restores settings)
     settings.GOOGLE_OAUTH_CLIENT_ID = 'client-id'
+    verifier = Mock(return_value={
+        'email': 'google@example.com',
+        'email_verified': True,
+        'given_name': 'Google',
+        'family_name': 'User',
+    })
+    monkeypatch.setattr(
+        'base_feature_app.services.auth_service.id_token.verify_oauth2_token',
+        verifier,
+    )
+    return verifier
 
-    def boom(*args, **kwargs):
-        raise Exception('bad')
 
-    monkeypatch.setattr('base_feature_app.services.auth_service.id_token.verify_oauth2_token', boom)
+@pytest.mark.django_db
+@pytest.mark.parametrize('credential', [None, '', '  ', [], {}, 42])
+def test_google_login_rejects_empty_credentials(api_client, google_verifier, credential):
+    """Malformed credentials return a generic rejection without creating accounts."""
+    response = api_client.post(reverse('google_login'), {'credential': credential}, format='json')
 
-    url = reverse('google_login')
-    response = api_client.post(url, {'credential': 'x'}, format='json')
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json() == {'error': 'Google token validation failed'}
+    assert get_user_model().objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_google_login_rejects_email_only_impersonation(api_client, google_verifier):
+    """An anonymous email-only request cannot modify or authenticate a staff account."""
+    user = get_user_model().objects.create_user(email='staff@example.com', is_staff=True)
+
+    response = api_client.post(reverse('google_login'), {
+        'email': user.email, 'given_name': 'Attacker', 'family_name': 'Changed',
+    }, format='json')
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json() == {'error': 'Google token validation failed'}
+    user.refresh_from_db()
+    assert (user.first_name, user.last_name, user.is_staff) == ('', '', True)
+    assert get_user_model().objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('payload', [
+    None,
+    [],
+    {'email': 'google@example.com'},
+    {
+        'email': 'google@example.com', 'email_verified': False,
+        'given_name': 'Attacker', 'family_name': 'Changed',
+    },
+    {'email': 'google@example.com', 'email_verified': 'true'},
+    {'email': 'google@example.com', 'email_verified': 1},
+    {'email_verified': True},
+    {'email': '', 'email_verified': True},
+    {'email': {}, 'email_verified': True},
+])
+def test_google_login_rejects_invalid_payload(api_client, google_verifier, payload):
+    """Invalid verified claims cannot fall back to the email in the request."""
+    user = get_user_model().objects.create_user(email='google@example.com', first_name='Original')
+    google_verifier.return_value = payload
+
+    response = api_client.post(reverse('google_login'), {
+        'credential': 'signed-token', 'email': user.email, 'given_name': 'Attacker',
+    }, format='json')
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json() == {'error': 'Google token validation failed'}
+    user.refresh_from_db()
+    assert (user.first_name, user.last_name) == ('Original', '')
+    assert get_user_model().objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('failure', [ValueError('Wrong audience'), RuntimeError('Transport failed')])
+def test_google_login_rejects_verification_failure(api_client, google_verifier, failure):
+    """Provider rejection or transport failure cannot create an authenticated session."""
+    google_verifier.side_effect = failure
+
+    response = api_client.post(reverse('google_login'), {'credential': 'invalid'}, format='json')
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json() == {'error': 'Google token validation failed'}
+    assert get_user_model().objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_google_login_requires_configured_audience(api_client, google_verifier, settings):
+    """Missing backend client ID disables Google login without a tokeninfo fallback."""
+    # quality: disable global_state_mutation (pytest-django restores settings)
+    settings.GOOGLE_OAUTH_CLIENT_ID = ''
+
+    response = api_client.post(reverse('google_login'), {'credential': 'signed-token'}, format='json')
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert response.json() == {'error': 'Google login is unavailable'}
+    assert get_user_model().objects.count() == 0
+    google_verifier.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_google_login_rejects_inactive_account(api_client, google_verifier):
+    """A valid Google token cannot reactivate or change a disabled local account."""
+    user = get_user_model().objects.create_user(email='google@example.com', is_active=False)
+
+    response = api_client.post(reverse('google_login'), {'credential': 'signed-token'}, format='json')
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json() == {'error': 'Account is disabled'}
+    user.refresh_from_db()
+    assert (user.first_name, user.last_name, user.is_active) == ('', '', False)
+    assert get_user_model().objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('body_email', ['staff@example.com', [], {}, 42])
+def test_google_login_uses_verified_identity(api_client, google_verifier, body_email):
+    """Tokens identify the signed account even when the request names a different user."""
+    from rest_framework_simplejwt.tokens import AccessToken
+    rightful = get_user_model().objects.create_user(email='google@example.com')
+    victim = get_user_model().objects.create_user(email='staff@example.com', is_staff=True)
+
+    response = api_client.post(reverse('google_login'), {
+        'credential': 'signed-token', 'email': body_email,
+    }, format='json')
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert (data['user']['id'], data['created']) == (rightful.pk, False)
+    assert AccessToken(data['access'])['user_id'] == str(rightful.pk)
+    api_client.credentials(HTTP_AUTHORIZATION='Bearer ' + data['access'])
+    assert api_client.get(reverse('validate_token')).json()['user']['id'] == rightful.pk
+    victim.refresh_from_db()
+    assert (victim.first_name, victim.last_name, victim.is_staff) == ('', '', True)
+    assert get_user_model().objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_google_login_accepts_id_token_alias(api_client, google_verifier):
+    """The legacy id_token key retains the successful token response contract."""
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    response = api_client.post(reverse('google_login'), {'id_token': 'signed-token'}, format='json')
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert set(data) == {'user', 'access', 'refresh', 'created'}
+    assert data['created'] is True
+    assert RefreshToken(data['refresh'])['user_id'] == str(data['user']['id'])
+    assert get_user_model().objects.get(pk=data['user']['id']).email == 'google@example.com'
