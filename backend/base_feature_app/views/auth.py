@@ -1,3 +1,4 @@
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -82,21 +83,15 @@ def google_login(request):
     Authenticate or register user with Google OAuth.
     """
     credential = request.data.get('credential') or request.data.get('id_token')
-    email = (request.data.get('email') or '').strip().lower()
-    given_name = (request.data.get('given_name') or '').strip()
-    family_name = (request.data.get('family_name') or '').strip()
-
     try:
         user, created = authenticate_google_user(
             credential=credential or '',
-            email=email,
-            given_name=given_name,
-            family_name=family_name,
         )
-    except ValueError as e:
-        error_msg = str(e)
-        if 'Email is required' in error_msg:
-            return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
+    except ImproperlyConfigured:
+        return Response({'error': 'Google login is unavailable'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    except PermissionError:
+        return Response({'error': 'Account is disabled'}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError:
         return Response({'error': 'Google token validation failed'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

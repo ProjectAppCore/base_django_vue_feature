@@ -1,5 +1,5 @@
-import requests as http_requests
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
@@ -59,26 +59,19 @@ def _resolve_google_payload(credential: str) -> dict:
     :returns: Token payload dict with email, given_name, family_name, picture.
     :raises ValueError: If the token is invalid or verification fails.
     """
+    if not isinstance(credential, str) or not credential.strip():
+        raise ValueError('Google token validation failed')
+
     client_id = getattr(settings, 'GOOGLE_OAUTH_CLIENT_ID', '')
+    if not isinstance(client_id, str) or not client_id.strip():
+        raise ImproperlyConfigured('Google login is unavailable')
 
     try:
-        if client_id:
-            payload = id_token.verify_oauth2_token(
-                credential,
-                google_requests.Request(),
-                client_id,
-            )
-        else:
-            response = http_requests.get(
-                'https://oauth2.googleapis.com/tokeninfo',
-                params={'id_token': credential},
-                timeout=5,
-            )
-            if response.status_code != 200:
-                raise ValueError('Invalid Google credential')
-            payload = response.json()
-    except ValueError:
-        raise
+        payload = id_token.verify_oauth2_token(
+            credential,
+            google_requests.Request(),
+            client_id,
+        )
     except Exception as exc:
         raise ValueError('Google token validation failed') from exc
 
@@ -87,33 +80,27 @@ def _resolve_google_payload(credential: str) -> dict:
 
 def authenticate_google_user(
     credential: str = '',
-    email: str = '',
-    given_name: str = '',
-    family_name: str = '',
 ) -> tuple[User, bool]:
     """
     Authenticate or register a user via Google OAuth.
 
-    :param credential: Google ID token (optional if email is provided directly).
-    :param email: User email address (used when no credential is provided).
-    :param given_name: User first name.
-    :param family_name: User last name.
+    :param credential: Required Google ID token.
     :returns: Tuple of (user, created) where created is True if user was newly registered.
     :raises ValueError: If email cannot be resolved or credential is invalid.
     """
-    if credential:
-        payload = _resolve_google_payload(credential)
-        token_email = (payload.get('email') or '').strip().lower()
-        if token_email:
-            email = token_email
-        given_name = payload.get('given_name') or given_name
-        family_name = payload.get('family_name') or family_name
-
+    payload = _resolve_google_payload(credential)
+    if not isinstance(payload, dict) or payload.get('email_verified') is not True:
+        raise ValueError('Google token validation failed')
+    email = payload.get('email')
+    if not isinstance(email, str) or not email.strip():
+        raise ValueError('Google token validation failed')
     email = email.strip().lower()
-    if not email:
-        raise ValueError('Email is required')
+    given_name = payload.get('given_name') or ''
+    family_name = payload.get('family_name') or ''
 
     user = User.objects.filter(email=email).first()
+    if user is not None and not user.is_active:
+        raise PermissionError('Account is disabled')
     created = False
 
     if not user:
