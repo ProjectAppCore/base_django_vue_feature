@@ -220,14 +220,12 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 
 #### shopping-checkout-complete: Complete checkout flow
 - Module: shopping · Priority: P1 · Route: `/checkout` · Roles: shared
-- Evidence: `frontend/src/views/product/Checkout.vue:227-240`.
-- E2E Coverage: success ✅, error ✅ (both `frontend/e2e/shopping/shopping-checkout.spec.js`)
+- Evidence: `frontend/src/views/product/Checkout.vue` (`handleSubmit`), `frontend/src/stores/product.js` (`createSale`), `backend/base_feature_app/serializers/sale.py` (`SaleSerializer.create`).
+- E2E scenarios: success, error and failure in `frontend/e2e/shopping/shopping-checkout.spec.js`. The success scenario verifies a real POST 201; runtime execution is accredited by the artifacts and CI of the associated PR.
 
-**Steps**: fill email/card/expiry/cvc/address/city/state/postal (all `data-testid="checkout-*"`), click "Pay Now"; success toast fires and redirects to `/`.
+**Steps**: add a real catalog product, open the cart, follow its Checkout button, fill email/card/expiry/cvc/address/city/state/postal (all `data-testid="checkout-*"`) and click "Pay Now". While the request is pending the submit button is disabled and duplicate submits are ignored. Only `POST create-sale/` returning 201 clears the cart, shows "Order created successfully" and navigates to `/`. The demo creates an order; it does not process card payments.
 
-**Branches**: empty required fields keep the user on `/checkout` (HTML5 validation) — this is the `error` outcome.
-
-**Known limitation (already on record, not new)**: `handleSubmit` (`Checkout.vue:227-240`) calls `productStore.createSale(form)` **without `await`** and never inspects the response; `createSale` itself (`frontend/src/stores/product.js:172-186`) swallows any error with `console.error` only and never rethrows. The success alert and redirect fire unconditionally, regardless of whether `POST create-sale/` actually succeeded (backend does return 400 with field errors — `backend/base_feature_app/views/sale.py:19-23` — but the UI never surfaces it). This means **`failure` has no UI surface for this flow** — recorded in commit `0535511`'s message as "a template-level product finding, inherited by every project born from this scaffold." Not added as a declared outcome here for that reason.
+**Branches**: empty required fields keep the user on `/checkout` (HTML5 validation), the `error` outcome. HTTP 400/500 or a network failure shows a localized error, preserves the cart and form, and enables another deliberate submission; this is the `failure` outcome. No automatic retry of order creation is added.
 
 ---
 
@@ -413,7 +411,7 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 
 ## Cross-Cutting Notes (evidence-only, not ranked — ranking is the Architect's call)
 
-1. **Checkout cannot observe backend failure.** `Checkout.vue:227-240`'s `handleSubmit` calls `productStore.createSale(form)` **without `await`** and never inspects the response. `createSale` itself (`frontend/src/stores/product.js:172-186`) catches any error with `console.error` only and never rethrows. The success alert and redirect to `/` fire unconditionally, regardless of whether `POST create-sale/` actually succeeded — the backend does return 400 with field errors (`backend/base_feature_app/views/sale.py:19-23`), but the UI never surfaces it. `failure` therefore has **no UI surface** for `shopping-checkout-complete`; this is already on record in commit `0535511`'s message as "a template-level product finding, inherited by every project born from this scaffold" and is intentionally **not** added as a declared outcome.
+1. **Checkout now observes creation failures.** `Checkout.vue` waits for the status returned by `createSale` and requires 201 before clearing the cart. HTTP/network rejection stays visible on checkout with preserved inputs and cart; the store propagates the failure. `shopping-checkout-complete` now declares `failure`. Component/store tests cover the change; E2E execution is accredited by the artifacts and CI of the associated PR.
 
 2. **Two "error"-tagged flows were really degraded empty-display states, not error messages — relabeled 2026-08-13.** `blog-detail-not-found`: `Detail.vue` initializes `blog = reactive({})` (`frontend/src/views/blog/Detail.vue:33`), which is always truthy, so a missing blog id renders an *empty* article shell (blank `<h1>`, broken image) instead of hiding anything or showing a message (`:54-56`). The existing spec's own comment already names this: *"The scaffold has no real not-found handling... a template gap worth closing"* (`frontend/e2e/blog/blog-detail.spec.js:6-11,47-53`). `shopping-product-detail`'s not-found branch is the cleaner sibling of the same pattern: `product` is a `computed` returning `undefined` for a bad id, so the whole `v-if="product"` panel is correctly absent (`frontend/src/views/product/Detail.vue:3`) — no message either, just nothing rendered. Both flows' declared outcome and both specs' `@outcome:` tags are now `display` (`frontend/e2e/blog/blog-detail.spec.js`, `frontend/e2e/shopping/shopping-product-detail.spec.js`); no test-body change was needed, only the classification. The underlying template gap (no real not-found handling) is left open as a product-backlog item, not a test gap.
 
@@ -443,7 +441,7 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 | shopping-cart-add | shopping | P1 | success | success ✅ | shopping/shopping-cart.spec.js |
 | shopping-cart-remove | shopping | P2 | success | success ✅ | shopping/shopping-cart.spec.js |
 | shopping-cart-persist | shopping | P2 | display | display ✅ (repaired 2026-08-13) | shopping/shopping-cart.spec.js |
-| shopping-checkout-complete | shopping | P1 | success, error | success ✅ · error ✅ | shopping/shopping-checkout.spec.js |
+| shopping-checkout-complete | shopping | P1 | success, error, failure | success · error · failure (execution evidence in PR artifacts/CI) | shopping/shopping-checkout.spec.js |
 | blog-list-view | blog | P2 | success | success ✅ | blog/blog-list.spec.js |
 | blog-detail-view | blog | P2 | success | success ✅ | blog/blog-detail.spec.js |
 | blog-detail-not-found | blog | P3 | display | display ✅ (relabeled 2026-08-13, see notes) | blog/blog-detail.spec.js |
@@ -461,6 +459,9 @@ Sources: frontend/e2e/flow-definitions.json, frontend/e2e/helpers/flow-tags.js, 
 | staging-phase-banner-display | platform | P4 | display | display ✅ | platform/staging-banner.spec.js |
 | staging-review-expired-overlay | platform | P3 | display | display ✅ | platform/staging-banner.spec.js |
 
-**Aggregate**: 31 flows (was 20; 30 required + 1 exempt) · 39 outcome-instances (was 23): success 18, error 6, failure 2 (was 0), display 13 (was 4) · priority split P1:8 P2:12 P3:7 P4:4.
+**Aggregate**: 31 flows (was 20; 30 required + 1 exempt) · 40 outcome-instances (was 23): success 18, error 6, failure 3 (was 0), display 13 (was 4) · priority split P1:8 P2:12 P3:7 P4:4.
 
-**Coverage (2026-08-13, post-QA run)**: 30/30 of the required flows covered; 1 flow is exempt. `auth-google-login` is declared `exempt` (`expectedSpecs: 0`) — structurally abstained, not a gap: every e2e test sets `window.__E2E_DISABLE_GOOGLE_LOGIN__` (`frontend/e2e/helpers/test.js:19-21`) so the button never renders, and its backend logic is fully unit-covered.
+**Coverage (2026-08-13, post-QA run)**: 30/30 of the required flows covered; 1 flow is exempt. `auth-google-login` is declared `exempt` (`expectedSpecs: 0`) — structurally abstained, not a gap: every e2e test sets `window.__E2E_DISABLE_GOOGLE_LOGIN__` (`frontend/e2e/helpers/test.js:19-21`) so the button never renders, external-provider verification remains outside this exemption. Permissive backend tests are not evidence that Google authentication is secure.
+
+
+**Checkout execution evidence**: the historical coverage totals above do not certify the revised checkout behavior. Its success spec verifies a real POST 201 and visible confirmation; failure specs verify preserved inputs and cart after HTTP/network rejection. Their runtime execution is accredited by the artifacts and CI of the associated PR, rather than by this static map.
