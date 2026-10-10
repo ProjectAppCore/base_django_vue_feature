@@ -7,7 +7,7 @@
   <Menu as="div" class="relative">
     <MenuButton
       aria-label="Toggle theme"
-      class="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+      class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
     >
       <component :is="currentIcon" class="h-5 w-5" />
     </MenuButton>
@@ -19,7 +19,7 @@
           type="button"
           @click="themeStore.setMode(opt.value)"
           :class="[
-            'flex w-full items-center gap-2 px-3 py-2 text-sm',
+            'flex min-h-11 w-full items-center gap-2 px-3 py-2 text-sm',
             active ? 'bg-accent text-accent-foreground' : '',
             themeStore.mode === opt.value ? 'text-primary font-medium' : '',
           ]"

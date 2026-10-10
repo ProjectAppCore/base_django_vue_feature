@@ -1,10 +1,10 @@
 <template>
     <header class="bg-card shadow-sm sticky top-0 z-50">
         <!-- Navbar for large screens -->
-        <nav class="mx-auto flex max-w-7xl items-center justify-between p-4 lg:px-8" aria-label="Global">
+        <nav class="mx-auto flex max-w-7xl items-center justify-between gap-2 p-4 lg:px-8" aria-label="Global">
             <!-- Logo/Brand -->
-            <div class="flex lg:flex-1">
-                <router-link to="/" class="text-xl font-bold text-foreground">
+            <div class="flex min-w-0 flex-1">
+                <router-link to="/" class="max-w-40 truncate text-xl font-bold text-foreground lg:max-w-none">
                     Base Project
                 </router-link>
             </div>
@@ -32,14 +32,14 @@
             </div>
 
             <!-- Right side actions -->
-            <div class="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4 items-center">
+            <div class="flex shrink-0 items-center gap-2 lg:flex-1 lg:justify-end lg:gap-x-4">
                 <!-- Search icon -->
-                <button @click="showSearchBar = true" class="p-2 hover:bg-accent rounded-full" data-testid="header-search">
+                <button @click="showSearchBar = true" aria-label="Search products" class="flex h-11 w-11 shrink-0 items-center justify-center hover:bg-accent rounded-full" data-testid="header-search">
                     <MagnifyingGlassIcon class="h-6 w-6 text-foreground" />
                 </button>
 
                 <!-- Shopping cart -->
-                <button @click="showShoppingCart = true" class="relative p-2 hover:bg-accent rounded-full" data-testid="header-cart">
+                <button @click="showShoppingCart = true" aria-label="Open shopping cart" class="relative flex h-11 w-11 shrink-0 items-center justify-center hover:bg-accent rounded-full" data-testid="header-cart">
                     <ShoppingBagIcon class="h-6 w-6 text-foreground" />
                     <span v-if="totalCartProducts > 0"
                         class="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -50,33 +50,35 @@
                 <!-- Theme toggle -->
                 <ThemeToggle />
 
-                <!-- Auth buttons -->
-                <template v-if="isAuthenticated">
-                    <router-link to="/dashboard"
-                        class="text-sm font-semibold leading-6 text-foreground hover:text-muted-foreground">
-                        Dashboard
-                    </router-link>
-                    <button @click="handleSignOut" data-testid="header-sign-out"
-                        class="text-sm font-semibold leading-6 text-foreground hover:text-muted-foreground">
-                        Sign Out
-                    </button>
-                </template>
-                <template v-else>
-                    <router-link to="/sign_in"
-                        class="text-sm font-semibold leading-6 text-foreground hover:text-muted-foreground">
-                        Sign In
-                    </router-link>
-                    <router-link to="/sign_up"
-                        class="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90">
-                        Sign Up
-                    </router-link>
-                </template>
+                <!-- Desktop auth buttons; mobile auth stays in the menu. -->
+                <div class="hidden lg:flex lg:items-center lg:gap-x-4">
+                    <template v-if="isAuthenticated">
+                        <router-link to="/dashboard"
+                            class="text-sm font-semibold leading-6 text-foreground hover:text-muted-foreground">
+                            Dashboard
+                        </router-link>
+                        <button @click="handleSignOut" data-testid="header-sign-out"
+                            class="text-sm font-semibold leading-6 text-foreground hover:text-muted-foreground">
+                            Sign Out
+                        </button>
+                    </template>
+                    <template v-else>
+                        <router-link to="/sign_in"
+                            class="text-sm font-semibold leading-6 text-foreground hover:text-muted-foreground">
+                            Sign In
+                        </router-link>
+                        <router-link to="/sign_up"
+                            class="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90">
+                            Sign Up
+                        </router-link>
+                    </template>
+                </div>
             </div>
 
             <!-- Mobile menu button -->
-            <div class="flex lg:hidden">
+            <div class="flex shrink-0 lg:hidden">
                 <button type="button" @click="mobileMenuOpen = true"
-                    class="-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md p-2.5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <span class="sr-only">Open main menu</span>
                     <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round"

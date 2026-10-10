@@ -1,86 +1,99 @@
 import { test, expect } from '../helpers/test.js';
 import { HEADER_CART_OVERLAY } from '../helpers/flow-tags.js';
 
-/**
- * E2E tests for the header cart overlay flow.
- *
- * Covers opening and closing the cart overlay from the header, and the
- * empty-cart display state.
- */
+const viewports = [
+  { width: 835, height: 1194 },
+  { width: 412, height: 915 },
+  { width: 1195, height: 835 },
+  { width: 1440, height: 900 },
+  { width: 2560, height: 1440 },
+];
 
-test.describe('Navigation — cart overlay', () => {
-  test('reopens the preserved shopping cart', {
-    tag: [...HEADER_CART_OVERLAY, '@role:shared', '@outcome:success'],
-  }, async ({ page }) => {
-    const viewport = page.viewportSize();
-    if (viewport && viewport.width < 1024) test.skip(true, 'Desktop-only flow — cart button hidden on mobile (hidden lg:flex)');
+async function addProductThroughCatalog(page) {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('e2e-cart-overlay-storage-cleared')) {
+      localStorage.clear();
+      sessionStorage.setItem('e2e-cart-overlay-storage-cleared', 'true');
+    }
+  });
+  await page.goto('/catalog');
+  // quality: allow-fragile-selector (select one real product from the scratch database)
+  await page.locator('a[href*="/product/"]').first().click();
+  await expect(page).toHaveURL(/\/product\/\d+$/);
+  await page.mouse.move(0, 0);
+  await page.getByTestId('add-to-cart').click();
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  const storedCart = await page.evaluate(() => localStorage.getItem('cartProducts'));
+  expect(JSON.parse(storedCart)).toHaveLength(1);
+  return { storedCart, product: JSON.parse(storedCart)[0] };
+}
 
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.addInitScript(() => {
-      if (!sessionStorage.getItem('e2e-cart-overlay-storage-cleared')) {
-        localStorage.clear();
-        sessionStorage.setItem('e2e-cart-overlay-storage-cleared', 'true');
-      }
+async function expectHeaderTargets(page) {
+  const targets = await page.getByRole('navigation', { name: 'Global' }).locator('button:visible').evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }),
+  );
+  expect(Math.min(...targets.map((target) => Math.min(target.width, target.height)))).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+}
+
+for (const viewport of viewports) {
+  test.describe(`Navigation — cart overlay @ ${viewport.width}`, () => {
+    test.use({ viewport });
+
+    test('reopens the preserved shopping cart before checkout', {
+      tag: [...HEADER_CART_OVERLAY, '@role:shared', '@outcome:success'],
+    }, async ({ page }) => {
+      const { storedCart, product } = await addProductThroughCatalog(page);
+      await expectHeaderTargets(page);
+      const cartButton = page.getByTestId('header-cart');
+      await cartButton.click();
+      const header = page.getByRole('banner');
+      await expect(header.getByText('Qty 1', { exact: true })).toHaveText('Qty 1');
+      const subtotal = await header.getByText(/^\$\s+/).innerText();
+      await page.getByTestId('cart-close').click();
+      await expect(page.getByTestId('cart-overlay')).toBeHidden();
+      await cartButton.click();
+      await expect(header.getByRole('heading', { name: product.title, exact: true })).toHaveText(product.title);
+      await expect(header.getByText('Qty 1', { exact: true })).toHaveText('Qty 1');
+      await expect(header.getByText(subtotal, { exact: true })).toHaveText(subtotal);
+      expect(await page.evaluate(() => localStorage.getItem('cartProducts'))).toBe(storedCart);
+      await header.getByRole('link', { name: 'Checkout', exact: true }).click();
+      await page.getByTestId('cart-close').click();
+      await expect(page).toHaveURL(/\/checkout$/);
     });
-    await page.goto('/catalog');
-    const productLinks = page.locator('a[href*="/product/"]');
-    // quality: allow-fragile-selector (select one real product from the scratch database)
-    await expect(productLinks.first()).toBeVisible({ timeout: 15000 });
-    await productLinks.first().click();
-    await expect(page).toHaveURL(/\/product\/\d+$/);
-    await page.mouse.move(0, 0);
-    await page.getByRole('button', { name: /add to cart/i }).click();
-    await page.getByRole('button', { name: 'OK', exact: true }).click();
-    const storedCart = await page.evaluate(() => localStorage.getItem('cartProducts'));
-    expect(JSON.parse(storedCart)).toHaveLength(1);
 
-    const cartButton = page.locator('[data-testid="header-cart"]');
-    await expect(cartButton).toBeVisible();
-    await cartButton.click();
-
-    const cartOverlay = page.locator('[data-testid="cart-overlay"]');
-    const header = page.getByRole('banner');
-    await expect(cartOverlay).toBeVisible();
-    await expect(header.getByText('Qty 1', { exact: true })).toBeVisible();
-    const productTitle = JSON.parse(storedCart)[0].title;
-    await expect(header.getByRole('heading', { name: productTitle, exact: true })).toBeVisible();
-    const subtotal = await header.getByText(/^\$\s+/).innerText();
-
-    await page.mouse.click(200, 400);
-    await expect(cartOverlay).toBeHidden();
-    await cartButton.click();
-
-    await expect(cartOverlay).toBeVisible();
-    await expect(header.getByRole('heading', { name: productTitle, exact: true })).toBeVisible();
-    await expect(header.getByText('Qty 1', { exact: true })).toBeVisible();
-    await expect(header.getByText(subtotal, { exact: true })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem('cartProducts'))).toBe(storedCart);
-
-    await page.getByTestId('cart-close').click();
-    await expect(cartOverlay).toBeHidden();
+    test('renders the empty-cart message', {
+      tag: [...HEADER_CART_OVERLAY, '@role:shared', '@outcome:display'],
+    }, async ({ page }) => {
+      await page.addInitScript(() => localStorage.clear());
+      await page.goto('/');
+      await page.getByTestId('header-cart').click();
+      await expect(page.getByRole('banner').getByText('No products', { exact: true })).toHaveText('No products');
+      await page.getByRole('link', { name: 'Continue Shopping', exact: true }).click();
+      await page.getByTestId('cart-close').click();
+      await expect(page).toHaveURL(/\/catalog$/);
+    });
   });
+}
 
-  test('renders the empty-cart message with no products in the cart', {
-    tag: [...HEADER_CART_OVERLAY, '@role:shared', '@outcome:display'],
-  }, async ({ page }) => {
-    const viewport = page.viewportSize();
-    if (viewport && viewport.width < 1024) test.skip(true, 'Desktop-only flow — cart button hidden on mobile (hidden lg:flex)');
+// The existing backdrop close remains testable where the cart leaves a visible backdrop.
+// At compact/portrait the panel fills the viewport, so the close button is the real UI path.
+for (const viewport of viewports.filter(({ width }) => width >= 1024)) {
+  test.describe(`Navigation — cart backdrop @ ${viewport.width}`, () => {
+    test.use({ viewport });
 
-    // Bug this catches: the v-else empty-cart branch in ShoppingCart.vue
-    // regressing — e.g. always rendering the CartProduct list (even when
-    // empty) instead of "No products" + Continue Shopping, or that link
-    // losing its route to the catalog.
-    await page.context().clearCookies();
-    await page.addInitScript(() => localStorage.clear());
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-
-    const cartButton = page.locator('[data-testid="header-cart"]');
-    await expect(cartButton).toBeVisible();
-    await cartButton.click();
-
-    await expect(page.getByText('No products')).toBeVisible();
-    await expect(page.getByRole('link', { name: /continue shopping/i })).toBeVisible();
+    test('preserves the cart after closing its backdrop', {
+      tag: [...HEADER_CART_OVERLAY, '@role:shared', '@outcome:success'],
+    }, async ({ page }) => {
+      const { product } = await addProductThroughCatalog(page);
+      await page.getByTestId('header-cart').click();
+      await page.getByTestId('cart-overlay').click({ position: { x: 16, y: 100 } });
+      await expect(page.getByTestId('cart-overlay')).toBeHidden();
+      await page.getByTestId('header-cart').click();
+      await expect(page.getByRole('banner').getByRole('heading', { name: product.title, exact: true })).toHaveText(product.title);
+    });
   });
-});
+}
