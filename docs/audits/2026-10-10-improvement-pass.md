@@ -135,8 +135,46 @@ Las ejecuciones iniciales de backend/unit corresponden a
 `d0ccf4f778706b82836551ea6cd3075e056d2f38`. La repetición E2E con imagen y
 auditorías afectadas corresponde a `8b463cb4f00db976a8b23a6ed3c597a0368fa997`.
 La incorporación del informe sólo añade Markdown; el Verifier vuelve a
-vincular las ejecuciones al SHA final limpio mediante un manifest. Los PRs
-consignan ese SHA y el resultado final de CI antes de integrar.
+comprobar lo afectado sobre el SHA final limpio. El manifest conserva el SHA
+real de cada ejecución y demuestra qué entradas ejecutables permanecen
+idénticas; no atribuye ejecuciones antiguas a un commit nuevo. Los PRs consignan
+el SHA final y el resultado de CI antes de integrar.
+
+La comprobación sobre `917a42e8908e02d1bff84729bc55c325621b705f` volvió a
+pasar los 84 casos backend y los 10 unit, pero rechazó el checkout: los cinco
+E2E combinados fallaron y el éxito aislado también. Los otros cuatro escenarios
+aislados pasaron. Esos resultados se conservaron; el CI verde no los sustituyó.
+
+Una traza posterior se agotó antes de añadir el producto: navegar al catálogo
+costó 20,465 segundos y varios módulos locales tardaron 3,4–3,8 segundos.
+El host tenía seis CPUs, carga de 30,30 y presión CPU de 77,77 %. La traza
+demostró retrasos generales y agotamiento del presupuesto, sin demostrar un
+fallo del cierre del carrito. Servir el build de producción del mismo código
+tampoco bastó: el contexto volvió a cerrarse durante la preparación.
+
+El Verifier confirmó en los resultados de Playwright un presupuesto total
+efectivo de 30 segundos. El orquestador proporcionó un config temporal ignorado
+que importa la configuración original y concede 90 segundos al escenario,
+manteniendo 5 segundos por comprobación, 30 por acción o navegación, un worker
+y cero reintentos. Conserva proyecto, viewport, acciones, animaciones y código
+de pruebas. La primera ejecución pasó los cinco casos en 44,4 segundos; un
+error de nombres de variables del reporter exigió repetir únicamente para
+capturar JSON/JUnit reales, sin reconstruirlos a partir de la conclusión.
+La captura posterior pasó **5/5 en 42,1 segundos**, sin reintentos, skips ni
+flaky. El Verifier aprobó las tres causas sobre
+`917a42e8908e02d1bff84729bc55c325621b705f`: 84 casos backend, 10 unit y cinco
+E2E; gate sin errores y flujos sin brechas adicionales. Los JSON/JUnit reales
+están en `917a42e/environment90/checkout.{json,xml}`, junto al manifest y el
+veredicto. Esa ejecución usó el build de producción servido por Vite preview;
+su procedencia y controles HTTP están en `917a42e/runtime-built.json`.
+El PR consigna también la comprobación afectada tras este cambio documental.
+No se aplicó un cambio de producto por esta limitación ambiental.
+
+El CI de integración sobre ese SHA también acredita los cinco casos de
+checkout en su primer intento, mediante el artefacto oficial de
+[run 38059507034](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38059507034).
+Un caso ajeno de `shopping-cart-add` necesitó un retry; queda registrado como
+inestabilidad fuera del alcance, sin ampliar la ronda para corregirlo.
 
 El primer CI de observabilidad descubrió una diferencia que el fixture sin
 imágenes no reproducía: el cursor del click en catálogo permanecía sobre la
@@ -183,5 +221,7 @@ Riesgos abiertos: acciones/contenido móviles pendientes; auditoría de
 dependencias incompleta; configuración de blacklist/renovación JWT que requiere
 diagnóstico conjunto. El push mostró 62 avisos de dependencias en la base,
 32 clasificados altos por GitHub; esta ronda no confirmó su alcanzabilidad ni
-los remedió. SQLite no certifica concurrencia/locks MySQL. No se certifica
+los remedió. SQLite no certifica concurrencia/locks MySQL. La ejecución E2E
+local requiere el presupuesto ambiental documentado; el caso CI ajeno de
+carrito sigue necesitando diagnóstico de su inestabilidad. No se certifica
 despliegue ni infraestructura.
