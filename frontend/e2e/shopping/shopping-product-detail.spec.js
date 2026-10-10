@@ -66,7 +66,8 @@ test.describe('Shopping — product detail', () => {
         // Product 10 is on the first catalog page in the scratch seed and CI seed.
         const response = await page.request.get('/api/products/10/');
         const product = await response.json();
-        expect(product.gallery_urls[1]).not.toBe(product.gallery_urls[0]);
+        const imagePaths = product.gallery_urls.map(imageUrl => new URL(imageUrl).pathname);
+        expect(imagePaths[1]).not.toBe(imagePaths[0]);
         await page.goto('/catalog');
         await page.getByRole('link', { name: product.title, exact: true })
           .and(page.locator('[href="/product/10"]')).click();
@@ -74,13 +75,13 @@ test.describe('Shopping — product detail', () => {
         await expect.poll(() => galleryImage.evaluate(image => ({
           src: image.getAttribute('src'), complete: image.complete,
           hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
-        }))).toEqual({ src: product.gallery_urls[0], complete: true, hasWidth: true, hasHeight: true });
+        }))).toEqual({ src: imagePaths[0], complete: true, hasWidth: true, hasHeight: true });
         const secondTab = page.getByRole('tab', { name: 'View image 2', exact: true });
 
         await secondTab.tap();
 
         await expect(secondTab).toHaveAttribute('aria-selected', 'true');
-        await expect(galleryImage).toHaveAttribute('src', product.gallery_urls[1]);
+        await expect(galleryImage).toHaveAttribute('src', imagePaths[1]);
         await expect.poll(() => galleryImage.evaluate(image => ({
           complete: image.complete,
           hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
@@ -109,7 +110,8 @@ test.describe('Shopping — product detail', () => {
         // Product 10 is on the first catalog page in the scratch seed and CI seed.
         const response = await page.request.get('/api/products/10/');
         const product = await response.json();
-        expect(product.gallery_urls[1]).not.toBe(product.gallery_urls[0]);
+        const imagePaths = product.gallery_urls.map(imageUrl => new URL(imageUrl).pathname);
+        expect(imagePaths[1]).not.toBe(imagePaths[0]);
         await page.goto('/catalog');
         await page.getByRole('link', { name: product.title, exact: true })
           .and(page.locator('[href="/product/10"]')).click();
@@ -117,7 +119,7 @@ test.describe('Shopping — product detail', () => {
         await expect.poll(() => galleryImage.evaluate(image => ({
           src: image.getAttribute('src'), complete: image.complete,
           hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
-        }))).toEqual({ src: product.gallery_urls[0], complete: true, hasWidth: true, hasHeight: true });
+        }))).toEqual({ src: imagePaths[0], complete: true, hasWidth: true, hasHeight: true });
         const secondTab = page.getByRole('tab', { name: 'View image 2', exact: true });
 
         const firstTab = page.getByRole('tab', { name: 'View image 1', exact: true });
@@ -125,7 +127,7 @@ test.describe('Shopping — product detail', () => {
         await firstTab.press('ArrowRight');
 
         await expect(secondTab).toHaveAttribute('aria-selected', 'true');
-        await expect(galleryImage).toHaveAttribute('src', product.gallery_urls[1]);
+        await expect(galleryImage).toHaveAttribute('src', imagePaths[1]);
         await expect.poll(() => galleryImage.evaluate(image => ({
           complete: image.complete,
           hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
@@ -153,7 +155,8 @@ test.describe('Shopping — product detail', () => {
       // Product 10 is on the first catalog page in the scratch seed and CI seed.
       const response = await page.request.get('/api/products/10/');
       const product = await response.json();
-      expect(product.gallery_urls[1]).not.toBe(product.gallery_urls[0]);
+      const imagePaths = product.gallery_urls.map(imageUrl => new URL(imageUrl).pathname);
+      expect(imagePaths[1]).not.toBe(imagePaths[0]);
       await page.goto('/catalog');
       await page.getByRole('link', { name: product.title, exact: true })
         .and(page.locator('[href="/product/10"]')).click();
@@ -161,13 +164,13 @@ test.describe('Shopping — product detail', () => {
       await expect.poll(() => galleryImage.evaluate(image => ({
         src: image.getAttribute('src'), complete: image.complete,
         hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
-      }))).toEqual({ src: product.gallery_urls[0], complete: true, hasWidth: true, hasHeight: true });
+      }))).toEqual({ src: imagePaths[0], complete: true, hasWidth: true, hasHeight: true });
       const secondTab = page.getByRole('tab', { name: 'View image 2', exact: true });
 
       await secondTab.click();
 
       await expect(secondTab).toHaveAttribute('aria-selected', 'true');
-      await expect(galleryImage).toHaveAttribute('src', product.gallery_urls[1]);
+      await expect(galleryImage).toHaveAttribute('src', imagePaths[1]);
       await expect.poll(() => galleryImage.evaluate(image => ({
         complete: image.complete,
         hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
