@@ -1,20 +1,10 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { createPinia, setActivePinia } from "pinia";
 import ShoppingCart from "@/components/product/ShoppingCart.vue";
-import { gsap } from "gsap";
 import { useProductStore } from "@/stores/product";
 import { useLanguageStore } from "@/stores/language";
-
-// Mock gsap
-jest.mock("gsap", () => ({
-  gsap: {
-    fromTo: jest.fn(),
-    // Decorative callbacks deliberately never complete.
-    timeline: jest.fn(() => ({ fromTo: jest.fn().mockReturnThis() })),
-  },
-}));
 
 jest.mock("@heroicons/vue/24/outline", () => ({
   XMarkIcon: {
@@ -288,7 +278,7 @@ describe("ShoppingCart Component", () => {
     expect(wrapper.text()).toContain("Continue Shopping");
   });
 
-  test.each(['cart-overlay', 'cart-close'])('closes through %s without animation completion', async (testId) => {
+  test.each(['cart-overlay', 'cart-close'])('closes through %s', async (testId) => {
     mountControlledCart();
 
     await wrapper.get(`[data-testid="${testId}"]`).trigger("click");
@@ -336,7 +326,7 @@ describe("ShoppingCart Component", () => {
     expect(wrapper.find("h2").text()).toBe("Shopping Cart");
   });
 
-  test("reopens the preserved cart without animation completion", async () => {
+  test("reopens the preserved cart", async () => {
     localStorage.setItem("cartProducts", JSON.stringify(productStore.cartProducts));
     mountControlledCart();
     await nextTick();
@@ -366,22 +356,39 @@ describe("ShoppingCart Component", () => {
     expect(document.body.style.overflow).toBe("auto");
   });
 
-  test("runs open animations after toggling visibility to true", async () => {
-    wrapper = mount(ShoppingCart, {
-      props: {
-        visible: false,
+  test("navigates to checkout from a newly opened cart", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/", name: "home", component: { template: "<h1>Home</h1>" } },
+        { path: "/catalog", name: "catalog", component: { template: "<h1>Catalog</h1>" } },
+        { path: "/checkout", name: "checkout", component: { template: "<h1>Checkout page</h1>" } },
+      ],
+    });
+    await router.push("/");
+    const CartParent = defineComponent({
+      components: { ShoppingCart },
+      setup() {
+        return { visible: ref(false) };
       },
+      template: `<div>
+        <button data-testid="open-cart" @click="visible = true">Open cart</button>
+        <ShoppingCart v-model:visible="visible" />
+        <main><RouterView /></main>
+      </div>`,
+    });
+    wrapper = mount(CartParent, {
       global: {
-        stubs: buildStubs(),
+        plugins: [router],
+        stubs: { XMarkIcon: true },
       },
     });
 
-    await wrapper.setProps({ visible: true });
-    await wrapper.vm.$nextTick();
-    await wrapper.vm.$nextTick();
+    await wrapper.get('[data-testid="open-cart"]').trigger("click");
+    await wrapper.get('a[href="/checkout"]').trigger("click");
+    await flushPromises();
 
-    expect(document.body.style.overflow).toBe("hidden");
-    expect(gsap.fromTo.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(wrapper.get("main h1").text()).toBe("Checkout page");
   });
 
   test("CartProduct removeProduct event with id looks up and removes correct item", async () => {

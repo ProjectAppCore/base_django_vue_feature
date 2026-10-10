@@ -167,7 +167,7 @@
       "module": "navigation",
       "roles": ["shared"],
       "priority": "P2",
-      "description": "User opens the shopping cart from the header; the close button or backdrop immediately updates parent visibility without waiting for animation completion. Reopening preserves items, quantities, subtotal and cart storage, and allows another close.",
+      "description": "User opens the shopping cart from the header with its panel and Checkout link immediately available, without decorative entrance or exit animation. The close button or backdrop immediately updates parent visibility. Reopening preserves items, quantities, subtotal and cart storage, and allows another close.",
       "outcomes": ["success", "display"]
     },
     "theme-toggle": {
