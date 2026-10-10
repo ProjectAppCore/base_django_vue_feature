@@ -138,6 +138,35 @@ La incorporación del informe sólo añade Markdown; el Verifier vuelve a
 vincular las ejecuciones al SHA final limpio mediante un manifest. Los PRs
 consignan ese SHA y el resultado final de CI antes de integrar.
 
+La comprobación sobre `917a42e8908e02d1bff84729bc55c325621b705f` volvió a
+pasar los 84 casos backend y los 10 unit, pero rechazó el checkout: los cinco
+E2E combinados fallaron y el éxito aislado también. Los otros cuatro escenarios
+aislados pasaron. Esos resultados se conservaron; el CI verde no los sustituyó.
+
+Una traza posterior se agotó antes de añadir el producto: navegar al catálogo
+costó 20,465 segundos y varios módulos locales tardaron 3,4–3,8 segundos.
+El host tenía seis CPUs, carga de 30,30 y presión CPU de 77,77 %. La traza
+demostró retrasos generales y agotamiento del presupuesto, sin demostrar un
+fallo del cierre del carrito. Servir el build de producción del mismo código
+tampoco bastó: el contexto volvió a cerrarse durante la preparación.
+
+El Verifier confirmó en los resultados de Playwright un presupuesto total
+efectivo de 30 segundos. El orquestador proporcionó un config temporal ignorado
+que importa la configuración original y concede 90 segundos al escenario,
+manteniendo 5 segundos por comprobación, 30 por acción o navegación, un worker
+y cero reintentos. Conserva proyecto, viewport, acciones, animaciones y código
+de pruebas. La primera ejecución pasó los cinco casos en 44,4 segundos; un
+error de nombres de variables del reporter exigió repetir únicamente para
+capturar JSON/JUnit reales, sin reconstruirlos a partir de la conclusión.
+El veredicto y los artefactos estructurados quedan consignados en el PR antes
+de integrar. No se aplicó un cambio de producto por esta limitación ambiental.
+
+El CI de integración sobre ese SHA también acredita los cinco casos de
+checkout en su primer intento, mediante el artefacto oficial de
+[run 38059507034](https://github.com/ProjectAppCore/base_django_vue_feature/actions/runs/38059507034).
+Un caso ajeno de `shopping-cart-add` necesitó un retry; queda registrado como
+inestabilidad fuera del alcance, sin ampliar la ronda para corregirlo.
+
 El primer CI de observabilidad descubrió una diferencia que el fixture sin
 imágenes no reproducía: el cursor del click en catálogo permanecía sobre la
 imagen de detalle, activaba zoom y retiraba temporalmente el botón de compra.
@@ -183,5 +212,7 @@ Riesgos abiertos: acciones/contenido móviles pendientes; auditoría de
 dependencias incompleta; configuración de blacklist/renovación JWT que requiere
 diagnóstico conjunto. El push mostró 62 avisos de dependencias en la base,
 32 clasificados altos por GitHub; esta ronda no confirmó su alcanzabilidad ni
-los remedió. SQLite no certifica concurrencia/locks MySQL. No se certifica
+los remedió. SQLite no certifica concurrencia/locks MySQL. La ejecución E2E
+local requiere el presupuesto ambiental documentado; el caso CI ajeno de
+carrito sigue necesitando diagnóstico de su inestabilidad. No se certifica
 despliegue ni infraestructura.
