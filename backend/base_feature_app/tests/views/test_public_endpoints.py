@@ -92,8 +92,10 @@ def test_create_sale_success(api_client, product, quantity):
     assert data['email'] == 'buyer@example.com'
     assert len(data['sold_products']) == 1
     assert data['sold_products'][0]['quantity'] == quantity
-    assert Sale.objects.count() == 1
-    assert SoldProduct.objects.count() == 1
+    assert (
+        Sale.objects.count(), SoldProduct.objects.count(),
+        Sale.sold_products.through.objects.count(),
+    ) == (1, 1, 1)
     sale = Sale.objects.get(pk=data['id'])
     sold_product = sale.sold_products.get()
     assert sold_product.product_id == product.pk
