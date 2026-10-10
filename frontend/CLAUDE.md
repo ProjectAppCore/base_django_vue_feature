@@ -1,12 +1,12 @@
-# Frontend Rules — Nuxt 3 / Vue 3 / TypeScript
+# Frontend Rules — Vue 3 / Vite / JavaScript
 
-## NuxtJS / Vue / TypeScript Development
+## Vue / Vite / JavaScript Development
 
-You are an expert in TypeScript, Node.js, NuxtJS, Vue 3, Shadcn Vue, Radix Vue, VueUse, and Tailwind.
+You are an expert in JavaScript, Node.js, Vite, Vue 3, Pinia, vue-router, VueUse, and Tailwind.
 
 ### Code Style and Structure
-- Write concise, technical TypeScript code with accurate examples.
-- Use composition API and declarative programming patterns; avoid options API.
+- Write concise, technical JavaScript code with accurate examples.
+- Use declarative programming patterns; preserve the existing Options API or composition API style when extending a component or store.
 - Prefer iteration and modularization over code duplication.
 - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
 - Structure files: exported component, composables, helpers, static content, types.
@@ -14,12 +14,11 @@ You are an expert in TypeScript, Node.js, NuxtJS, Vue 3, Shadcn Vue, Radix Vue, 
 ### Naming Conventions
 - Use lowercase with dashes for directories (e.g., components/auth-wizard).
 - Use PascalCase for component names (e.g., AuthWizard.vue).
-- Use camelCase for composables (e.g., useAuthState.ts).
+- Use camelCase for composables (e.g., useAuthState.js).
 
-### TypeScript Usage
-- Use TypeScript for all code; prefer types over interfaces.
-- Avoid enums; use const objects instead.
-- Use Vue 3 with TypeScript, leveraging defineComponent and PropType.
+### JavaScript Usage
+- The frontend uses JavaScript and Vue single-file components.
+- Jest transforms JavaScript and Vue files through `jest.config.cjs`; it has no TypeScript transform.
 
 ### Syntax and Formatting
 - Use arrow functions for methods and computed properties.
@@ -31,7 +30,7 @@ You are an expert in TypeScript, Node.js, NuxtJS, Vue 3, Shadcn Vue, Radix Vue, 
 - Implement responsive design with Tailwind CSS; use a mobile-first approach.
 
 ### Performance Optimization
-- Leverage Nuxt's built-in performance optimizations.
+- Use the existing Vite build (`npm run build` from `frontend/`).
 - Use Suspense for asynchronous components.
 - Implement lazy loading for routes and components.
 - Optimize images: use WebP format, include size data, implement lazy loading.
@@ -40,13 +39,13 @@ You are an expert in TypeScript, Node.js, NuxtJS, Vue 3, Shadcn Vue, Radix Vue, 
 - Use VueUse for common composables and utility functions.
 - Use Pinia for state management.
 - Optimize Web Vitals (LCP, CLS, FID).
-- Utilize Nuxt's auto-imports feature for components and composables.
+- Import components and composables explicitly.
 
-### Nuxt-specific Guidelines
-- Follow Nuxt 3 directory structure (pages/, components/, composables/).
-- Use Nuxt's built-in features: auto-imports, file-based routing, server routes, plugins.
-- Use useFetch and useAsyncData for data fetching.
-- Implement SEO best practices using Nuxt's useHead and useSeoMeta.
+### Vite / Vue Guidelines
+- Views live in `src/views/`; reusable components and composables live in `src/components/` and `src/composables/`.
+- Register routes explicitly in `src/router/index.js`; creating a file does not register a route.
+- Use the existing HTTP service in `src/services/http/client.js` or its wrappers in `src/stores/services/request_http.js` for API requests.
+- Route titles use `meta.title` and the existing router `afterEach` hook.
 
 ### Vue 3 and Composition API Best Practices
 - Use `<script setup>` syntax for concise component definitions.
@@ -79,7 +78,7 @@ Use `dark:` variant consistently. Define color pairs for every visible element.
 ### @apply Usage
 Use `@apply` ONLY for base component styles that repeat 5+ times. Prefer utility classes inline.
 
-### Conditional Classes (Vue/Nuxt)
+### Conditional Classes (Vue)
 ```vue
 <template>
   <button :class="[
@@ -104,7 +103,7 @@ Use `@apply` ONLY for base component styles that repeat 5+ times. Prefer utility
 ## Jest & Testing Library Rules
 
 ### Test File Structure
-Place test files in `test/` directory, use `.spec.ts` extension for Vue/Nuxt projects.
+Place unit test files in `test/` with `.test.js` names, matching the existing Jest tests. From `frontend/`, run a specific file with `npm test -- test/components/ShoppingCart.test.js --runInBand`.
 
 ### Test Anatomy
 Follow Arrange → Act → Assert pattern. One concept per test.
@@ -211,7 +210,7 @@ You are a Senior QA Automation Engineer expert in TypeScript, JavaScript, and Pl
 - Keep tests DRY by extracting reusable logic into helper functions.
 - Always use recommended built-in and role-based locators (`page.getByRole`, `page.getByLabel`, `page.getByText`, `page.getByTitle`, etc.) over complex selectors.
 - Use `page.getByTestId` whenever `data-testid` is defined.
-- Use the `playwright.config.ts` file for global configuration.
+- Use the existing `playwright.config.mjs` file for global configuration.
 - Use web-first assertions (`toBeVisible`, `toHaveText`, etc.) whenever possible.
 - Avoid hardcoded timeouts — use `page.waitFor` with specific conditions.
 - Ensure tests run reliably in parallel without shared state conflicts.
@@ -219,39 +218,26 @@ You are a Senior QA Automation Engineer expert in TypeScript, JavaScript, and Pl
 
 ---
 
-## i18n Rules — Nuxt
+## i18n Rules — Vue i18n
 
 ### Core Principle
 NEVER hardcode user-facing strings. Every text the user sees must go through the translation system.
 
-### Nuxt i18n Setup
-```typescript
-// nuxt.config.ts
-export default defineNuxtConfig({
-  modules: ['@nuxtjs/i18n'],
-  i18n: {
-    locales: [
-      { code: 'es', name: 'Español', file: 'es.json' },
-      { code: 'en', name: 'English', file: 'en.json' },
-    ],
-    defaultLocale: 'es',
-    lazy: true,
-    langDir: 'locales/',
-    strategy: 'prefix_except_default',
-  },
-})
-```
+### Vue i18n Setup
+- `src/i18n/index.js` configures `createI18n` with English and Spanish messages.
+- `src/main.js` registers the plugin; `src/stores/i18n.js` switches and persists the locale.
 
 ### Usage in Components
 ```vue
-<script setup lang="ts">
-const { t, locale, setLocale } = useI18n()
+<script setup>
+import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
+
+const { t } = useI18n()
 </script>
 
 <template>
-  <h1>{{ $t('products.title') }}</h1>
-  <p>{{ $t('products.price', { price: product.price }) }}</p>
-  <NuxtLinkLocale to="/products">{{ $t('nav.products') }}</NuxtLinkLocale>
+  <RouterLink to="/sign_in">{{ t('auth.sign_in') }}</RouterLink>
 </template>
 ```
 
@@ -261,51 +247,30 @@ const { t, locale, setLocale } = useI18n()
 - Never concatenate translated strings — use variables instead
 - Always handle pluralization properly
 - Dates, numbers, and currencies use Intl API
-- Default locale: Spanish; keep translation keys in English
+- The configured default and fallback locale are English (`src/i18n/index.js`); keep translation keys in English
 - Lazy load translation files to reduce bundle size
 
 ---
 
-## SEO Rules — Nuxt
+## SEO Rules — Vue SPA
 
-### Meta Tags
+### Page Titles
 Every public page MUST have unique title, description, and canonical URL.
 
-```vue
-<script setup lang="ts">
-useHead({
-  title: `${product.value.name} | Mi Tienda`,
-  meta: [
-    { name: 'description', content: product.value.description.slice(0, 155) },
-  ],
-  link: [
-    { rel: 'canonical', href: `https://mitienda.com/products/${product.value.id}` },
-  ],
-})
-
-useSeoMeta({
-  ogTitle: product.value.name,
-  ogDescription: product.value.description.slice(0, 155),
-  ogImage: product.value.image,
-  ogType: 'website',
-  twitterCard: 'summary_large_image',
-})
-</script>
-```
+- Set each route's `meta.title` in `src/router/index.js`; its `afterEach` hook updates `document.title`.
+- Nuxt `useHead` and `useSeoMeta` are not auto-imported or configured in this SPA.
 
 ### Title Pattern
 - Max 60 characters, primary keyword first, brand last
 - Use `|` or `—` as separator, be consistent
 - Every page has a UNIQUE title
 
-### SSR vs SSG Decision
-- SSR: Content changes every request (dashboard, cart)
-- ISR: Content changes rarely (products, blog)
-- SSG: Content never changes (about, terms, landing)
+### Rendering
+- The current Vite build is a client-rendered SPA; it does not provide Nuxt SSR, ISR, or SSG.
 
 ### Images
 - Always include `alt` text
-- Use `<NuxtImg>` for automatic optimization
+- Use standard `<img>` elements; this template does not provide `<NuxtImg>`
 - Use WebP/AVIF formats
 - Set explicit `width` and `height` to prevent layout shift
 
