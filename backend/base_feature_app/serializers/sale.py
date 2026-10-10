@@ -12,6 +12,11 @@ class SoldProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Product is not available.')
         return value
 
+    def validate_quantity(self, value):
+        if value < 1:
+            raise serializers.ValidationError('Quantity must be at least 1.')
+        return value
+
     class Meta:
         model = SoldProduct
         fields = ['product_id', 'product', 'quantity']

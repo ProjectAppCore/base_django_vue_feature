@@ -67,8 +67,9 @@ def test_create_sale_validation_error(api_client):
 
 
 @pytest.mark.django_db
-def test_create_sale_success(api_client, product):
-    """Verifies that a valid sale creation request creates a Sale and SoldProduct in the database."""
+@pytest.mark.parametrize('quantity', [1, 2])
+def test_create_sale_success(api_client, product, quantity):
+    """Persist the exact positive quantity supplied by a guest."""
     url = reverse('create-sale')
     payload = {
         'email': 'buyer@example.com',
@@ -79,7 +80,7 @@ def test_create_sale_success(api_client, product):
         'sold_products': [
             {
                 'product_id': product.id,
-                'quantity': 2,
+                'quantity': quantity,
             }
         ],
     }
@@ -90,9 +91,52 @@ def test_create_sale_success(api_client, product):
     data = response.json()
     assert data['email'] == 'buyer@example.com'
     assert len(data['sold_products']) == 1
-    assert data['sold_products'][0]['quantity'] == 2
-    assert Sale.objects.count() == 1
-    assert SoldProduct.objects.count() == 1
+    assert data['sold_products'][0]['quantity'] == quantity
+    assert (
+        Sale.objects.count(), SoldProduct.objects.count(),
+        Sale.sold_products.through.objects.count(),
+    ) == (1, 1, 1)
+    sale = Sale.objects.get(pk=data['id'])
+    sold_product = sale.sold_products.get()
+    assert sold_product.product_id == product.pk
+    assert sold_product.quantity == quantity
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('quantity', [0, -1])
+def test_create_sale_rejects_non_positive_quantity(api_client, product, quantity):
+    """Reject the entire guest order when a later line has no positive quantity."""
+    existing_sale = Sale.objects.create(
+        email='existing@example.com', address='7 Existing St', city='Existing City',
+        state='Existing State', postal_code='77777',
+    )
+    existing_line = SoldProduct.objects.create(product=product, quantity=7)
+    existing_sale.sold_products.add(existing_line)
+    sales_before = list(Sale.objects.order_by('pk').values())
+    lines_before = list(SoldProduct.objects.order_by('pk').values())
+    relations_before = list(Sale.sold_products.through.objects.order_by('pk').values())
+    payload = {
+        'email': 'buyer@example.com', 'address': '123 Main St',
+        'city': 'City', 'state': 'State', 'postal_code': '12345',
+        'sold_products': [
+            {'product_id': product.pk, 'quantity': 2},
+            {'product_id': product.pk, 'quantity': quantity},
+        ],
+    }
+
+    response = api_client.post(reverse('create-sale'), payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()['sold_products'] == [
+        {}, {'quantity': ['Quantity must be at least 1.']},
+    ]
+    assert (
+        Sale.objects.count(), SoldProduct.objects.count(),
+        Sale.sold_products.through.objects.count(),
+    ) == (1, 1, 1)
+    assert list(Sale.objects.order_by('pk').values()) == sales_before
+    assert list(SoldProduct.objects.order_by('pk').values()) == lines_before
+    assert list(Sale.sold_products.through.objects.order_by('pk').values()) == relations_before
 
 
 @pytest.mark.django_db
