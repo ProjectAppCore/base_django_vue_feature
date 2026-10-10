@@ -107,8 +107,11 @@
                         </div>
                     </div>
 
+                    <p v-if="checkoutError" role="alert" class="mt-6 text-red-600">
+                        {{ checkoutError }}
+                    </p>
                     <div class="flex justify-end mt-6">
-                        <button type="submit"
+                        <button type="submit" :disabled="isSubmitting" :aria-busy="isSubmitting"
                             class="w-36 bg-primary text-primary-foreground p-3 rounded-lg hover:bg-primary/90 font-semibold text-lg tracking-wider">
                             Pay Now
                         </button>
@@ -201,6 +204,8 @@
     const currentLanguage = computed(() => languageStore.getCurrentLanguage);
 
     const router = useRouter();
+    const isSubmitting = ref(false);
+    const checkoutError = ref('');
 
     // Form reference
     const form = reactive({
@@ -224,19 +229,32 @@
     /**
      * Handle form submission
      */
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
+        if (isSubmitting.value) return;
+        isSubmitting.value = true;
+        checkoutError.value = '';
         form.soldProducts = extractProductInfo(cartProducts.value);
-        productStore.createSale(form);
 
-        localStorage.removeItem("cartProducts");
-        productStore.cartProducts = [];
+        try {
+            const status = await productStore.createSale(form);
+            if (status !== 201) throw new Error('Order creation was not confirmed');
 
-        Swal.fire({
-            title: "The payment has been processed successfully",
-            icon: "success"
-        });
-
-        router.push({ name: "home" });
+            localStorage.removeItem("cartProducts");
+            productStore.cartProducts = [];
+            Swal.fire({
+                title: currentLanguage.value === 'es'
+                    ? 'Pedido creado correctamente'
+                    : 'Order created successfully',
+                icon: "success"
+            });
+            await router.push({ name: "home" });
+        } catch {
+            checkoutError.value = currentLanguage.value === 'es'
+                ? 'No pudimos crear tu pedido. Conservamos tu carrito. Inténtalo de nuevo.'
+                : 'We could not create your order. Your cart has been kept. Please try again.';
+        } finally {
+            isSubmitting.value = false;
+        }
     };
 
     /**

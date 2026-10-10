@@ -167,22 +167,19 @@ export const useProductStore = defineStore("productStore", () => {
   /**
    * Create a new sale.
    * @param {Object} form - The form data for the sale.
-   * @returns {number|undefined} - The response status.
+   * @returns {number} - The response status.
+   * @throws {Error} - When the request fails.
    */
   async function createSale(form) {
-    try {
-      const response = await create_request("create-sale/", {
-        email: form.email,
-        address: form.address,
-        city: form.city,
-        state: form.state,
-        postal_code: form.postalCode,
-        sold_products: form.soldProducts,
-      });
-      return response.status;
-    } catch (error) {
-      console.error("Error creating sale:", error);
-    }
+    const response = await create_request("create-sale/", {
+      email: form.email,
+      address: form.address,
+      city: form.city,
+      state: form.state,
+      postal_code: form.postalCode,
+      sold_products: form.soldProducts,
+    });
+    return response.status;
   }
 
   return {

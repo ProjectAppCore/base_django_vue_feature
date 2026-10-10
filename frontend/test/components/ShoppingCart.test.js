@@ -1,31 +1,10 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { createPinia, setActivePinia } from "pinia";
 import ShoppingCart from "@/components/product/ShoppingCart.vue";
-import { gsap } from "gsap";
 import { useProductStore } from "@/stores/product";
 import { useLanguageStore } from "@/stores/language";
-
-// Mock gsap
-jest.mock("gsap", () => ({
-  gsap: {
-    fromTo: jest.fn().mockReturnValue({
-      then: jest.fn((cb) => {
-        if (typeof cb === "function") {
-          cb();
-        }
-      }),
-    }),
-    timeline: jest.fn((options = {}) => {
-      if (typeof options.onComplete === "function") {
-        options.onComplete();
-      }
-      return {
-        fromTo: jest.fn().mockReturnThis(),
-      };
-    }),
-  },
-}));
 
 jest.mock("@heroicons/vue/24/outline", () => ({
   XMarkIcon: {
@@ -61,6 +40,24 @@ describe("ShoppingCart Component", () => {
   let wrapper;
   let productStore;
 
+  function mountControlledCart() {
+    useLanguageStore().setCurrentLanguage("en");
+    const CartParent = defineComponent({
+      components: { ShoppingCart },
+      setup() {
+        const visible = ref(true);
+        return { visible };
+      },
+      template: `<div>
+        <button data-testid="open-cart" @click="visible = true">Open cart</button>
+        <ShoppingCart v-model:visible="visible" />
+      </div>`,
+    });
+    wrapper = mount(CartParent, {
+      global: { stubs: buildStubs({ CartProduct: false }) },
+    });
+  }
+
   beforeEach(() => {
     setActivePinia(createPinia());
     productStore = useProductStore();
@@ -69,8 +66,8 @@ describe("ShoppingCart Component", () => {
     
     // Setup some products in cart
     productStore.cartProducts = [
-      { id: 1, title: "Product 1", price: 100, quantity: 2 },
-      { id: 2, title: "Product 2", price: 200, quantity: 1 },
+      { id: 1, title: "Product 1", price: 100, quantity: 2, gallery_urls: [] },
+      { id: 2, title: "Product 2", price: 200, quantity: 1, gallery_urls: [] },
     ];
   });
 
@@ -81,6 +78,7 @@ describe("ShoppingCart Component", () => {
     }
     document.body.style.overflow = "";
     productStore.cartProducts = [];
+    localStorage.removeItem("cartProducts");
   });
 
   test("renders cart when visible", () => {
@@ -280,43 +278,14 @@ describe("ShoppingCart Component", () => {
     expect(wrapper.text()).toContain("Continue Shopping");
   });
 
-  test("emits update:visible=false when overlay is clicked", async () => {
-    wrapper = mount(ShoppingCart, {
-      props: {
-        visible: true,
-      },
-      global: {
-        stubs: buildStubs(),
-      },
-    });
+  test.each(['cart-overlay', 'cart-close'])('closes through %s', async (testId) => {
+    mountControlledCart();
 
-    await wrapper.find('[data-testid="cart-overlay"]').trigger("click");
-    // closeCart uses Promise.all(...).then, so wait a microtask
-    await Promise.resolve();
+    await wrapper.get(`[data-testid="${testId}"]`).trigger("click");
 
-    const events = wrapper.emitted("update:visible");
-    expect(events).toBeTruthy();
-    expect(events[0]).toEqual([false]);
-  });
-
-  test("emits update:visible=false when close icon is clicked", async () => {
-    wrapper = mount(ShoppingCart, {
-      props: {
-        visible: true,
-      },
-      global: {
-        stubs: buildStubs(),
-      },
-    });
-
-    const closeButton = wrapper.find('[data-testid="cart-close"]');
-    expect(closeButton.exists()).toBe(true);
-    await closeButton.trigger("click");
-    await Promise.resolve();
-
-    const events = wrapper.emitted("update:visible");
-    expect(events).toBeTruthy();
-    expect(events[0]).toEqual([false]);
+    expect(wrapper.find('[data-testid="cart-overlay"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="cart-close"]').exists()).toBe(false);
+    expect(document.body.style.overflow).toBe("auto");
   });
 
   test("renders checkout button when products exist", () => {
@@ -357,44 +326,69 @@ describe("ShoppingCart Component", () => {
     expect(wrapper.find("h2").text()).toBe("Shopping Cart");
   });
 
-  test("runs open and close animations when visible", async () => {
-    wrapper = mount(ShoppingCart, {
-      props: {
-        visible: true,
-      },
-      global: {
-        stubs: buildStubs(),
-      },
+  test("reopens the preserved cart", async () => {
+    localStorage.setItem("cartProducts", JSON.stringify(productStore.cartProducts));
+    mountControlledCart();
+    await nextTick();
+    const storedCart = localStorage.getItem("cartProducts");
+
+    await wrapper.get('[data-testid="cart-close"]').trigger("click");
+    expect(wrapper.find('[data-testid="cart-overlay"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="open-cart"]').trigger("click");
+
+    expect(wrapper.find('[data-testid="cart-overlay"]').exists()).toBe(true);
+    expect({
+      titles: wrapper.findAllComponents({ name: "CartProduct" }).map((item) => item.get("h3").text()),
+      lines: wrapper.findAllComponents({ name: "CartProduct" }).map((item) =>
+        item.findAll("p").map((paragraph) => paragraph.text())
+      ),
+      subtotal: wrapper.find("span").text(),
+    }).toEqual({
+      titles: ["Product 1", "Product 2"],
+      lines: [["$200", "Qty 2"], ["$200", "Qty 1"]],
+      subtotal: "$ 400",
     });
+    expect(localStorage.getItem("cartProducts")).toBe(storedCart);
+    expect(document.body.style.overflow).toBe("hidden");
 
-    await wrapper.vm.$nextTick();
-    await wrapper.vm.$nextTick();
-    const openCalls = gsap.fromTo.mock.calls.length;
-    expect(openCalls).toBeGreaterThanOrEqual(2);
-
-    await wrapper.find('[data-testid="cart-overlay"]').trigger("click");
-    await Promise.resolve();
-
-    expect(gsap.timeline).toHaveBeenCalledTimes(1);
-    expect(gsap.fromTo.mock.calls.length).toBeGreaterThanOrEqual(openCalls);
+    await wrapper.get('[data-testid="cart-overlay"]').trigger("click");
+    expect(wrapper.find('[data-testid="cart-overlay"]').exists()).toBe(false);
+    expect(document.body.style.overflow).toBe("auto");
   });
 
-  test("runs open animations after toggling visibility to true", async () => {
-    wrapper = mount(ShoppingCart, {
-      props: {
-        visible: false,
+  test("navigates to checkout from a newly opened cart", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/", name: "home", component: { template: "<h1>Home</h1>" } },
+        { path: "/catalog", name: "catalog", component: { template: "<h1>Catalog</h1>" } },
+        { path: "/checkout", name: "checkout", component: { template: "<h1>Checkout page</h1>" } },
+      ],
+    });
+    await router.push("/");
+    const CartParent = defineComponent({
+      components: { ShoppingCart },
+      setup() {
+        return { visible: ref(false) };
       },
+      template: `<div>
+        <button data-testid="open-cart" @click="visible = true">Open cart</button>
+        <ShoppingCart v-model:visible="visible" />
+        <main><RouterView /></main>
+      </div>`,
+    });
+    wrapper = mount(CartParent, {
       global: {
-        stubs: buildStubs(),
+        plugins: [router],
+        stubs: { XMarkIcon: true },
       },
     });
 
-    await wrapper.setProps({ visible: true });
-    await wrapper.vm.$nextTick();
-    await wrapper.vm.$nextTick();
+    await wrapper.get('[data-testid="open-cart"]').trigger("click");
+    await wrapper.get('a[href="/checkout"]').trigger("click");
+    await flushPromises();
 
-    expect(document.body.style.overflow).toBe("hidden");
-    expect(gsap.fromTo.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(wrapper.get("main h1").text()).toBe("Checkout page");
   });
 
   test("CartProduct removeProduct event with id looks up and removes correct item", async () => {

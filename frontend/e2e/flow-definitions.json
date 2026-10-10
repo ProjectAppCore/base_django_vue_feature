@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "lastUpdated": "2026-08-13",
+  "lastUpdated": "2026-10-10",
   "flows": {
     "auth-login-email": {
       "name": "Login with email/password",
@@ -39,7 +39,7 @@
       "module": "auth",
       "roles": ["shared"],
       "priority": "P3",
-      "description": "User authenticates via the Google button on sign-in/sign-up; backend creates or logs in the account. Structurally abstained: every e2e run sets window.__E2E_DISABLE_GOOGLE_LOGIN__=true so the Google button never renders (frontend/e2e/helpers/test.js:19-21); backend logic is fully unit-covered.",
+      "description": "User authenticates via the Google button on sign-in/sign-up; backend creates or logs in the account. Structurally abstained: every e2e run sets window.__E2E_DISABLE_GOOGLE_LOGIN__=true so the Google button never renders (frontend/e2e/helpers/test.js:19-21); external-provider verification remains outside this E2E exemption; permissive backend tests do not establish authentication security.",
       "expectedSpecs": 0
     },
     "auth-logout": {
@@ -119,8 +119,8 @@
       "module": "shopping",
       "roles": ["shared"],
       "priority": "P1",
-      "description": "User completes checkout with items in cart",
-      "outcomes": ["success", "error"]
+      "description": "User creates an order with items in cart; creation failures preserve the cart and form with a visible error. The demo does not process card payments.",
+      "outcomes": ["success", "error", "failure"]
     },
     "blog-list-view": {
       "name": "View blog listing",
@@ -167,7 +167,7 @@
       "module": "navigation",
       "roles": ["shared"],
       "priority": "P2",
-      "description": "User opens and closes the shopping cart overlay from the header",
+      "description": "User opens the shopping cart from the header with its panel and Checkout link immediately available, without decorative entrance or exit animation. The close button or backdrop immediately updates parent visibility. Reopening preserves items, quantities, subtotal and cart storage, and allows another close.",
       "outcomes": ["success", "display"]
     },
     "theme-toggle": {
