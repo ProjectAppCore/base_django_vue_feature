@@ -22,11 +22,10 @@ test.describe('Shopping — product detail', () => {
     await page.goto('/catalog');
     await page.waitForLoadState('domcontentloaded');
 
-    const productLinks = page.locator('a[href*="/product/"]');
-    await expect(productLinks.first()).toBeVisible({ timeout: 15000 });
-    // quality: allow-fragile-selector (first product from a dynamic server-rendered list; no stable per-item id)
-    const href = await productLinks.first().getAttribute('href');
-    await page.goto(href);
+    const response = await page.request.get('/api/products/10/');
+    const product = await response.json();
+    await page.getByRole('link', { name: product.title, exact: true })
+      .and(page.locator('[href="/product/10"]')).click();
     await expect(page).toHaveURL(/\/product\/\d+/);
 
     // Actions render under v-if="product": wait for the product to load.
@@ -55,5 +54,134 @@ test.describe('Shopping — product detail', () => {
     // also satisfy `toHaveCount(0)` and pass.
     await expect(page.getByRole('heading', { name: 'Trending Products', level: 2 })).toHaveText('Trending Products');
     await expect(page.getByTestId('add-to-cart')).toHaveCount(0);
+  });
+
+  for (const { width, height } of [{ width: 835, height: 1194 }, { width: 412, height: 915 }]) {
+    test.describe(`Gallery — ${width}x${height}`, () => {
+      test.use({ viewport: { width, height }, hasTouch: true });
+
+      test(`selects the second gallery image by tap at ${width}x${height}`, {
+        tag: [...SHOPPING_PRODUCT_DETAIL, '@role:shared', '@outcome:success'],
+      }, async ({ page }) => {
+        // Product 10 is on the first catalog page in the scratch seed and CI seed.
+        const response = await page.request.get('/api/products/10/');
+        const product = await response.json();
+        expect(product.gallery_urls[1]).not.toBe(product.gallery_urls[0]);
+        await page.goto('/catalog');
+        await page.getByRole('link', { name: product.title, exact: true })
+          .and(page.locator('[href="/product/10"]')).click();
+        const galleryImage = page.getByRole('tabpanel').locator('img');
+        await expect.poll(() => galleryImage.evaluate(image => ({
+          src: image.getAttribute('src'), complete: image.complete,
+          hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
+        }))).toEqual({ src: product.gallery_urls[0], complete: true, hasWidth: true, hasHeight: true });
+        const secondTab = page.getByRole('tab', { name: 'View image 2', exact: true });
+
+        await secondTab.tap();
+
+        await expect(secondTab).toHaveAttribute('aria-selected', 'true');
+        await expect(galleryImage).toHaveAttribute('src', product.gallery_urls[1]);
+        await expect.poll(() => galleryImage.evaluate(image => ({
+          complete: image.complete,
+          hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
+        }))).toEqual({ complete: true, hasWidth: true, hasHeight: true });
+        const targets = await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => {
+          const bounds = tab.getBoundingClientRect();
+          return { width: bounds.width >= 44, height: bounds.height >= 44 };
+        }));
+        expect(targets).toEqual(product.gallery_urls.map(() => ({ width: true, height: true })));
+        const documentSize = await page.evaluate(() => ({
+          width: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        }));
+        expect(documentSize.scrollWidth).toBeLessThanOrEqual(documentSize.width);
+      });
+    });
+  }
+
+  for (const { width, height } of [{ width: 1195, height: 835 }, { width: 2560, height: 1440 }]) {
+    test.describe(`Gallery — ${width}x${height}`, () => {
+      test.use({ viewport: { width, height }, hasTouch: false });
+
+      test(`selects the second gallery image by keyboard at ${width}x${height}`, {
+        tag: [...SHOPPING_PRODUCT_DETAIL, '@role:shared', '@outcome:success'],
+      }, async ({ page }) => {
+        // Product 10 is on the first catalog page in the scratch seed and CI seed.
+        const response = await page.request.get('/api/products/10/');
+        const product = await response.json();
+        expect(product.gallery_urls[1]).not.toBe(product.gallery_urls[0]);
+        await page.goto('/catalog');
+        await page.getByRole('link', { name: product.title, exact: true })
+          .and(page.locator('[href="/product/10"]')).click();
+        const galleryImage = page.getByRole('tabpanel').locator('img');
+        await expect.poll(() => galleryImage.evaluate(image => ({
+          src: image.getAttribute('src'), complete: image.complete,
+          hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
+        }))).toEqual({ src: product.gallery_urls[0], complete: true, hasWidth: true, hasHeight: true });
+        const secondTab = page.getByRole('tab', { name: 'View image 2', exact: true });
+
+        const firstTab = page.getByRole('tab', { name: 'View image 1', exact: true });
+        await firstTab.focus();
+        await firstTab.press('ArrowRight');
+
+        await expect(secondTab).toHaveAttribute('aria-selected', 'true');
+        await expect(galleryImage).toHaveAttribute('src', product.gallery_urls[1]);
+        await expect.poll(() => galleryImage.evaluate(image => ({
+          complete: image.complete,
+          hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
+        }))).toEqual({ complete: true, hasWidth: true, hasHeight: true });
+        const targets = await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => {
+          const bounds = tab.getBoundingClientRect();
+          return { width: bounds.width >= 44, height: bounds.height >= 44 };
+        }));
+        expect(targets).toEqual(product.gallery_urls.map(() => ({ width: true, height: true })));
+        const documentSize = await page.evaluate(() => ({
+          width: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        }));
+        expect(documentSize.scrollWidth).toBeLessThanOrEqual(documentSize.width);
+      });
+    });
+  }
+
+  test.describe('Gallery — 1440x900', () => {
+    test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false });
+
+    test('selects the second gallery image by click at 1440x900', {
+      tag: [...SHOPPING_PRODUCT_DETAIL, '@role:shared', '@outcome:success'],
+    }, async ({ page }) => {
+      // Product 10 is on the first catalog page in the scratch seed and CI seed.
+      const response = await page.request.get('/api/products/10/');
+      const product = await response.json();
+      expect(product.gallery_urls[1]).not.toBe(product.gallery_urls[0]);
+      await page.goto('/catalog');
+      await page.getByRole('link', { name: product.title, exact: true })
+        .and(page.locator('[href="/product/10"]')).click();
+      const galleryImage = page.getByRole('tabpanel').locator('img');
+      await expect.poll(() => galleryImage.evaluate(image => ({
+        src: image.getAttribute('src'), complete: image.complete,
+        hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
+      }))).toEqual({ src: product.gallery_urls[0], complete: true, hasWidth: true, hasHeight: true });
+      const secondTab = page.getByRole('tab', { name: 'View image 2', exact: true });
+
+      await secondTab.click();
+
+      await expect(secondTab).toHaveAttribute('aria-selected', 'true');
+      await expect(galleryImage).toHaveAttribute('src', product.gallery_urls[1]);
+      await expect.poll(() => galleryImage.evaluate(image => ({
+        complete: image.complete,
+        hasWidth: image.naturalWidth > 0, hasHeight: image.naturalHeight > 0,
+      }))).toEqual({ complete: true, hasWidth: true, hasHeight: true });
+      const targets = await page.getByRole('tab').evaluateAll(tabs => tabs.map(tab => {
+        const bounds = tab.getBoundingClientRect();
+        return { width: bounds.width >= 44, height: bounds.height >= 44 };
+      }));
+      expect(targets).toEqual(product.gallery_urls.map(() => ({ width: true, height: true })));
+      const documentSize = await page.evaluate(() => ({
+        width: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+      expect(documentSize.scrollWidth).toBeLessThanOrEqual(documentSize.width);
+    });
   });
 });

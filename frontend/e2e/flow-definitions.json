@@ -87,7 +87,7 @@
       "module": "shopping",
       "roles": ["shared"],
       "priority": "P1",
-      "description": "User navigates to and views a product detail page",
+      "description": "User navigates from the catalog to a product detail page, changes quantity and selects gallery images by touch, click or keyboard at 412x915, 835x1194, 1195x835, 1440x900 and 2560x1440",
       "outcomes": ["success", "display"]
     },
     "shopping-cart-add": {
