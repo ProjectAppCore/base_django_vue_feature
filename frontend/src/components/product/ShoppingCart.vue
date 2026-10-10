@@ -1,11 +1,11 @@
 <template>
     <!-- Shopping Cart Overlay -->
     <div class="fixed inset-0 flex justify-end z-50" v-if="visible">
-        <div ref="background"
+        <div
             @click="closeCart()"
             class="absolute inset-0 bg-foreground/40 backdrop-blur-md" data-testid="cart-overlay">
         </div>
-        <div ref="cart" class="relative bg-card text-card-foreground h-full w-full lg:w-2/5 shadow-lg flex flex-col z-60">
+        <div class="relative bg-card text-card-foreground h-full w-full lg:w-2/5 shadow-lg flex flex-col z-60">
             <!-- Cart Header -->
             <div class="flex justify-between items-center p-10">
                 <h2 class="text-2xl font-semibold">Shopping Cart</h2>
@@ -57,16 +57,11 @@
 </template>
 
 <script setup>
-    import { computed, ref, watchEffect } from "vue";
+    import { computed, watchEffect } from "vue";
     import CartProduct from "./CartProduct.vue";
-    import { gsap } from "gsap";
     import { XMarkIcon } from "@heroicons/vue/24/outline";
     import { useLanguageStore } from "@/stores/language.js";
     import { useProductStore } from "@/stores/product";
-
-    // Create references for Background and Cart Elements
-    const background = ref(null);
-    const cart = ref(null);
 
     const appStore = useLanguageStore();
     /* istanbul ignore next */
@@ -86,39 +81,9 @@
     });
     const emit = defineEmits(["update:visible"]);
 
-    // Watch for changes in the current language, and in the state of shoppingCartToggle
+    // Lock page scrolling while the cart is visible.
     watchEffect(() => {
-        if (props.visible) {
-            document.body.style.overflow = "hidden";
-            if (background.value) {
-                gsap.fromTo(
-                    background.value,
-                    {
-                        opacity: 0,
-                    },
-                    {
-                        opacity: 1,
-                        duration: 1,
-                        ease: "power2.inOut",
-                    }
-                );
-            }
-            if (cart.value) {
-                gsap.fromTo(
-                    cart.value,
-                    {
-                        x: cart.value.offsetWidth,
-                    },
-                    {
-                        x: 0,
-                        duration: 1,
-                        ease: "power2.inOut",
-                    }
-                );
-            }
-        } else {
-            document.body.style.overflow = "auto";
-        }
+        document.body.style.overflow = props.visible ? "hidden" : "auto";
     });
 
     const closeCart = () => {
