@@ -328,9 +328,8 @@ describe("Product Store", () => {
       });
     });
 
-    test("should handle createSale error", async () => {
+    test("should propagate createSale rejection", async () => {
       const store = useProductStore();
-      const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
       const form = {
         email: "test@example.com",
         address: "123 Main St",
@@ -340,13 +339,10 @@ describe("Product Store", () => {
         soldProducts: [],
       };
 
-      create_request.mockRejectedValue(new Error("Server error"));
+      const error = new Error("Server error");
+      create_request.mockRejectedValue(error);
 
-      const status = await store.createSale(form);
-
-      expect(status).toBeUndefined();
-      expect(consoleErrorSpy).toHaveBeenCalled();
-      consoleErrorSpy.mockRestore();
+      await expect(store.createSale(form)).rejects.toBe(error);
     });
   });
 });
