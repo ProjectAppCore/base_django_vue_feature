@@ -1,19 +1,21 @@
+"""Exercise admin deletion actions and account administration."""
+
 # quality: disable misplaced_file (admin tests live in admin/ subdirectory by design)
+import pytest
+from base_feature_app.admin import (
+    BaseFeatureAdminSite,
+    BaseFeatureUserAdmin,
+    BlogAdmin,
+    ProductAdmin,
+    SaleAdmin,
+    admin_site,
+)
+from base_feature_app.models import Blog, Product, Sale, SoldProduct
+from base_feature_app.tests.factories import SaleFactory, SoldProductFactory
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory
-import pytest
-
-from base_feature_app.admin import (
-    BlogAdmin,
-    ProductAdmin,
-    SaleAdmin,
-    BaseFeatureUserAdmin,
-    BaseFeatureAdminSite,
-    admin_site,
-)
-from base_feature_app.models import Blog, Product, Sale, SoldProduct
 from django_attachments.models import Library
 
 
@@ -35,6 +37,7 @@ def _request_with_messages(user):
 
 
 def test_blogadmin_delete_queryset_deletes_objects(db):
+    """Remove selected blogs through the registered admin implementation."""
     request = _staff_request(db)
     lib = Library.objects.create(title="BLog Lib")
     Blog.objects.create(title="B1", description="D", category="C", image=lib)
@@ -96,6 +99,41 @@ def test_saleadmin_total_products_and_delete_queryset(db):
     assert SoldProduct.objects.count() == 0
 
 
+def test_saleadmin_delete_selected_preserves_other_sale(client, db):
+    """The real admin deletion action preserves another sale's shared line."""
+    client.force_login(_staff_request(db).user)
+    selected, retained = SaleFactory(), SaleFactory()
+    shared = SoldProductFactory(quantity=7)
+    exclusive = SoldProductFactory(product=shared.product, quantity=3)
+    selected.sold_products.add(shared, exclusive)
+    retained.sold_products.add(shared)
+    selected_id = selected.pk
+    retained_before = Sale.objects.values().get(pk=retained.pk)
+
+    response = client.post('/admin/base_feature_app/sale/', {
+        'action': 'delete_selected', '_selected_action': selected_id, 'post': 'yes',
+    })
+
+    assert response.status_code == 302
+    assert not Sale.objects.filter(pk=selected_id).exists()
+    assert Sale.objects.values().get(pk=retained.pk) == retained_before
+    assert list(retained.sold_products.values_list('pk', 'quantity')) == [(shared.pk, 7)]
+    assert not SoldProduct.objects.filter(pk=exclusive.pk).exists()
+
+
+def test_saleadmin_form_offers_previously_linked_line(client, db):
+    """The admin permits another sale to select an already linked line."""
+    client.force_login(_staff_request(db).user)
+    selected, retained = SaleFactory(), SaleFactory()
+    shared = SoldProductFactory(quantity=7)
+    selected.sold_products.add(shared)
+
+    response = client.get(f'/admin/base_feature_app/sale/{retained.pk}/change/')
+
+    assert response.status_code == 200
+    assert response.context['adminform'].form.fields['sold_products'].queryset.get(pk=shared.pk).quantity == 7
+
+
 @pytest.mark.django_db
 def test_custom_admin_site_get_app_list_includes_sections(monkeypatch, db):
     """Verifies that the custom admin site groups models into named management sections."""
@@ -130,6 +168,7 @@ def test_custom_admin_site_get_app_list_includes_sections(monkeypatch, db):
 
 @pytest.mark.django_db
 def test_user_admin_login_as_link_renders_admin_url():
+    """Render the target account administration link."""
     User = get_user_model()
     user = User.objects.create_user(email='target@example.com', password='pass12345')
     admin = BaseFeatureUserAdmin(User, admin_site)
@@ -142,6 +181,7 @@ def test_user_admin_login_as_link_renders_admin_url():
 
 @pytest.mark.django_db
 def test_user_admin_login_as_redirects_to_frontend(settings):
+    """Redirect account impersonation to the configured frontend."""
     User = get_user_model()
     factory = RequestFactory()
     admin_user = User.objects.create_superuser(email='admin@example.com', password='pass12345')
@@ -162,6 +202,7 @@ def test_user_admin_login_as_redirects_to_frontend(settings):
 
 @pytest.mark.django_db
 def test_user_admin_login_as_requires_active_superuser():
+    """Reject account impersonation by a regular user."""
     User = get_user_model()
     factory = RequestFactory()
     regular_user = User.objects.create_user(email='user@example.com', password='pass12345')
@@ -189,6 +230,7 @@ def test_user_admin_login_as_requires_active_superuser():
     ),
 ])
 def test_user_admin_login_as_blocks_ineligible_target(build_target):
+    """Reject impersonation of an ineligible target account."""
     User = get_user_model()
     admin_user = User.objects.create_superuser(email='admin@example.com', password='pass12345')
     target_user = build_target(User)

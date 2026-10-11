@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, router, transaction
 from base_feature_app.models import Product
 
 class SoldProduct(models.Model):
@@ -29,9 +29,12 @@ class Sale(models.Model):
     def __str__(self):
         return self.email
 
-    def delete(self, *args, **kwargs):
-        # Delete all sold products associated with this sale
-        for sold_product in self.sold_products.all():
-            sold_product.delete()
-        # Call the superclass delete method
-        super().delete(*args, **kwargs)
+    def delete(self, using=None, keep_parents=False):
+        alias = using or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=alias):
+            line_ids = list(self.sold_products.using(alias).values_list('pk', flat=True))
+            super().delete(using=alias, keep_parents=keep_parents)
+            # A line can still belong to another sale through the M2M relation.
+            SoldProduct.objects.using(alias).filter(
+                pk__in=line_ids, sale__isnull=True,
+            ).delete()
