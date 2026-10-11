@@ -4,6 +4,8 @@ from django.urls import reverse
 from django_attachments.models import Library
 from rest_framework import status
 
+from base_feature_app.models import Product
+
 
 @pytest.fixture
 def staff_client(admin_client):
@@ -175,6 +177,39 @@ def test_product_delete_returns_204_for_staff(created_product):
     url = reverse('delete-product', kwargs={'product_id': product_id})
     response = client.delete(url)
     assert response.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.fixture
+def products_sharing_gallery(staff_client):
+    """Two products reference the same library through real CRUD requests."""
+    library = Library.objects.create(title='Shared API gallery')
+    payload = {
+        'title': 'Shared first', 'category': 'Cat', 'sub_category': 'Sub',
+        'description': 'Shared description', 'price': 50, 'gallery': library.pk,
+    }
+    first = staff_client.post(reverse('create-product'), payload, format='json')
+    second = staff_client.post(
+        reverse('create-product'), {**payload, 'title': 'Shared second'}, format='json',
+    )
+    assert (first.status_code, second.status_code) == (201, 201)
+    return first.json()['id'], second.json()['id'], library.pk
+
+
+@pytest.mark.django_db
+def test_product_delete_preserves_other_api_product(staff_client, products_sharing_gallery):
+    """Deleting one API product leaves the other product retrievable unchanged."""
+    first_id, retained_id, library_id = products_sharing_gallery
+    retained_before = Product.objects.values().get(pk=retained_id)
+
+    response = staff_client.delete(reverse('delete-product', kwargs={'product_id': first_id}))
+    retained_response = staff_client.get(reverse('retrieve-product', kwargs={'product_id': retained_id}))
+
+    assert response.status_code == 204
+    assert not Product.objects.filter(pk=first_id).exists()
+    assert retained_response.status_code == 200
+    assert retained_response.json()['title'] == 'Shared second'
+    assert Product.objects.values().get(pk=retained_id) == retained_before
+    assert Library.objects.filter(pk=library_id).exists()
 
 
 @pytest.mark.django_db
