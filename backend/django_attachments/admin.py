@@ -20,7 +20,7 @@ class AttachmentsPermsMixin(UserPassesTestMixin):
 			return False
 		if not user.is_staff:
 			return False
-		if not user.has_perm('attachments.change_attachment'):
+		if not user.has_perm('django_attachments.change_attachment'):
 			return False
 		return True
 
