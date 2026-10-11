@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, router, transaction
 from django_attachments.models import Library
 from django_attachments.fields import GalleryField
 
@@ -34,10 +34,18 @@ class Product(models.Model):
     def __str__(self):
         return self.title
 
-    def delete(self, *args, **kwargs):
-        try:
-            if self.gallery:
-                self.gallery.delete()
-        except Library.DoesNotExist:
-            pass
-        super(Product, self).delete(*args, **kwargs)
+    def delete(self, using=None, keep_parents=False):
+        alias = using or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=alias):
+            library = None
+            if self.gallery_id is not None:
+                library = Library.objects.using(alias).select_for_update().filter(
+                    pk=self.gallery_id,
+                ).first()
+            # PROTECT must succeed before touching the library or its files.
+            super().delete(using=alias, keep_parents=keep_parents)
+            if library is not None and not (
+                library.products_with_attachment.using(alias).exists()
+                or library.blog_image.using(alias).exists()
+            ):
+                library.delete(using=alias)
