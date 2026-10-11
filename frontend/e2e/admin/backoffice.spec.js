@@ -75,7 +75,7 @@ test.describe('Backoffice — permission errors for a non-staff user', () => {
 test.describe('Backoffice — staff user sees real data', () => {
   test.beforeAll(() => {
     runDjangoShell(
-      "from base_feature_app.models import User; User.objects.filter(email='e2e-staff@example.com').exists() or User.objects.create_user(email='e2e-staff@example.com', password='password', is_active=True, is_staff=True)",
+      "from django.contrib.auth.hashers import make_password; from base_feature_app.models import User; User.objects.get_or_create(email='e2e-staff@example.com', defaults={'password': lambda: make_password('password'), 'is_active': True, 'is_staff': True})",
     );
   });
 
